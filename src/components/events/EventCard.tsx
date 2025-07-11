@@ -17,6 +17,7 @@ import * as LucideIcons from "lucide-react";
 import { getIconByName } from "@/constants/pillaricons"; // <-- Add this import
 import ConfirmationModal from '../shared/ConfirmationModal';
 import { CounterButton } from '@/components/ui/counter-button';
+import { ensureProductGradient, Product } from "@/services/events/productService";
 
 // Helper to determine if a color is "dark" (returns true for dark backgrounds)
 function isColorDark(hexColor: string): boolean {
@@ -73,25 +74,23 @@ export const EventCard = ({
   const { canViewMentorProfiles, canViewStaffProfiles, canProcessMentorRequests, canRequestMentor } = usePermissions();
 
   // Loading state for product gradient
+  const [productWithGradient, setProductWithGradient] = useState<Product | undefined>(event.ProductInfo);
   const [isProductLoading, setIsProductLoading] = useState(false);
-  const [productWithGradient, setProductWithGradient] = useState(event.ProductInfo);
 
   useEffect(() => {
-    // If product gradient is missing, set loading and ensure it
-    if (!event.ProductInfo?.gradient) {
-      setIsProductLoading(true);
-      // Simulate async gradient ensuring (replace with actual fetch if needed)
-      setTimeout(() => {
-        if (event.ProductInfo) {
-          // Use ensureProductGradient from productService
-          // @ts-ignore
-          const { ensureProductGradient } = require("@/services/events/productService");
-          setProductWithGradient(ensureProductGradient(event.ProductInfo));
-        }
+    if (event.ProductInfo) {
+      if (!event.ProductInfo.gradient) {
+        setIsProductLoading(true);
+        console.log(`Event ${event.id}: Product (ID: ${event.ProductInfo.id}, Name: ${event.ProductInfo.name}) is missing gradient. Generating...`);
+        const ensuredProduct = ensureProductGradient(event.ProductInfo);
+        setProductWithGradient(ensuredProduct);
         setIsProductLoading(false);
-      }, 100); // Simulate short delay
+      } else {
+        setProductWithGradient(event.ProductInfo);
+        setIsProductLoading(false);
+      }
     } else {
-      setProductWithGradient(event.ProductInfo);
+      setProductWithGradient(undefined);
       setIsProductLoading(false);
     }
   }, [event.ProductInfo]);
@@ -205,8 +204,8 @@ export const EventCard = ({
   const firstColor = extractFirstColor(productGradient) || "#3b82f6";
   const useWhiteText = isColorDark(firstColor);
 
-  // Show skeleton if product gradient is loading
-  if (isProductLoading) {
+  // Show skeleton if product data is being loaded/processed or is completely missing.
+  if (isProductLoading || !productWithGradient || !productName) {
     return (
       <div className="w-full min-h-[420px] max-w-xl mx-auto rounded-3xl bg-gray-100 dark:bg-gray-800 animate-pulse flex items-center justify-center">
         <span className="text-lg text-muted-foreground">{language === "en" ? "Loading event…" : "Event wird geladen…"}</span>
