@@ -1,16 +1,23 @@
-import React, { createContext, useContext, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useMemo } from 'react'; // <-- Füge useMemo hinzu
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Event } from '@/types/event';
 import { useAuth } from './AuthContext';
 import { QUERY_KEYS } from '../constants/queryKeys';
 import { supabase } from '../lib/supabase';
 import { fetchStaffNames } from '../utils/staffUtils';
+// NEU: Importiere fetchProducts und Product
+import { fetchProducts, Product } from '@/services/events/productService';
+// NEU: Importiere ensureProductGradient
+import { ensureProductGradient } from '@/services/events/productService';
 
 // Define types for our context
 interface DataContextType {
   events: Event[] | undefined;
   isLoadingEvents: boolean;
   eventsError: Error | null;
+  products: Product[] | undefined; // NEU
+  isLoadingProducts: boolean; // NEU
+  productsError: Error | null; // NEU
   refetchEvents: () => Promise<void>;
   refetchAllData: () => Promise<void>;
   getEventById: (id: string) => Event | undefined;
@@ -21,41 +28,49 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-
-
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  
-  // Implement actual data fetching for when cache is empty
+
+  // --- NEU: QUERIES FÜR PRODUKTE ---
+  const {
+    data: products,
+    isLoading: isLoadingProducts,
+    error: productsError,
+    refetch: refetchProducts,
+  } = useQuery<Product[], Error>({
+    queryKey: [QUERY_KEYS.PRODUCTS],
+    queryFn: async () => {
+      const fetchedProducts = await fetchProducts();
+      return fetchedProducts.map(p => ensureProductGradient(p));
+    },
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    retry: false,
+    enabled: !!user && user.hasAccess
+  });
+  // --- ENDE NEUE PRODUKT-QUERIES ---
+
+  // --- ANPASSUNG fetchEventsFromAPI: ProductInfo Join entfernen ---
   const fetchEventsFromAPI = async (): Promise<Event[]> => {
     try {
       const { data, error } = await supabase
         .from('mentorbooking_events')
-        .select(`
-          *,
-          ProductInfo:product_id (
-            id,
-            name,
-            description_effort,
-            description_de,
-            icon_name,
-            gradient
-          )
-        `)
+        .select(`* , product_id`)
         .order('date', { ascending: true });
-      
+
       if (error) {
         throw error;
       }
-      
+
       if (!data || data.length === 0) {
         return [];
       }
 
-      // Collect all staff member IDs (only from staff_members)
       const allStaffIds = new Set<string>();
-
       data.forEach(event => {
         if (event.staff_members && Array.isArray(event.staff_members)) {
           event.staff_members.forEach(id => {
@@ -65,20 +80,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
         }
       });
-      
       const staffNames = await fetchStaffNames([...allStaffIds]);
-      
-      // Transform the events
+
       const transformedEvents = data
         .filter(event => event && typeof event === 'object')
         .map(event => {
           const staffMembers = event.staff_members && Array.isArray(event.staff_members) && event.staff_members.length > 0
             ? event.staff_members.filter(id => id && typeof id === 'string')
             : [];
-
           const primaryStaffId = staffMembers[0] || '';
           const primaryStaffName = staffNames[primaryStaffId] || 'Unknown';
-
           return {
             id: event.id,
             title: event.company || '',
@@ -100,13 +111,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             acceptedMentors: event.accepted_mentors || [],
             declinedMentors: event.declined_mentors || [],
             amount_requiredmentors: event.amount_requiredmentors || 1,
-            product_id: event.product_id,
-            ProductInfo: event.ProductInfo, // <-- Make sure this is included!
+            product_id: event.product_id, // <-- Dies ist die ID, die wir jetzt nutzen
+            // ProductInfo: event.ProductInfo, // <-- Entfernt
             teams_link: event.teams_link || '',
             initial_selected_mentors: event.initial_selected_mentors || [],
           };
         });
-
       return transformedEvents;
     } catch (error) {
       throw error;
@@ -208,7 +218,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Add a new comprehensive data refresh function
   const refetchAllData = async () => {
     try {
-      
+      await refetchProducts(); // Produkte mit aktualisieren
       // 1. Refetch events
       const freshEvents = await fetchEventsFromAPI();
       queryClient.setQueryData([QUERY_KEYS.EVENTS], freshEvents || []);
@@ -312,6 +322,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       events,
       isLoadingEvents,
       eventsError: eventsError as Error | null,
+      products, // NEU
+      isLoadingProducts, // NEU
+      productsError: productsError as Error | null, // NEU
       refetchEvents,
       refetchAllData,
       getEventById,

@@ -27,7 +27,6 @@ export interface Event {
   column?: number;
   amount_requiredmentors: number;
   product_id?: number;
-  ProductInfo?: ProductInfo;
   employer_id?: string;
   initial_selected_mentors?: string[];
   employerInfo?: {

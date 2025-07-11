@@ -1,7 +1,6 @@
 import { EventCard } from "@/components/events/EventCard";
 import { Event } from "@/types/event";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useData } from "@/contexts/DataContext";
 
 interface EventsGridViewProps {
   events: Event[];

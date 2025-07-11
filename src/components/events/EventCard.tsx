@@ -1,23 +1,23 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react'; // useState/useEffect entfernt
 import { Event } from '@/types/event';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import type { Product } from '@/services/events/productService'; // Nur Typ importieren
 import { Calendar, Clock, MapPin, Users, User, Loader2, Eye, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { useData } from '@/contexts/DataContext';
+import { useData } from '@/contexts/DataContext'; // Produkte aus globalem Cache holen
 import { usePermissions } from '@/hooks/usePermissions';
 import { useMentorRequests } from '@/hooks/useMentorRequests';
-import { isEventInPast } from '@/utils/eventUtils';
+import { isEventInPast } from "@/utils/eventUtils";
 import { RequestButton } from "@/components/ui/RequestButton";
 import * as LucideIcons from "lucide-react";
-import { getIconByName } from "@/constants/pillaricons"; // <-- Add this import
+import { getIconByName } from "@/constants/pillaricons";
 import ConfirmationModal from '../shared/ConfirmationModal';
 import { CounterButton } from '@/components/ui/counter-button';
-import { ensureProductGradient, Product } from "@/services/events/productService";
 
 // Helper to determine if a color is "dark" (returns true for dark backgrounds)
 function isColorDark(hexColor: string): boolean {
@@ -51,7 +51,6 @@ interface EventCardProps {
   isPendingRequest?: boolean;
   refetchEvents: () => Promise<void>;
   isSubmittingRequest?: boolean;
-
 }
 
 export const EventCard = ({
@@ -69,39 +68,53 @@ export const EventCard = ({
 }: EventCardProps) => {
   const { theme } = useTheme();
   const { user } = useAuth();
-  const { requestToMentor, isRequestLoading } = useMentorRequests(event, user); 
-  const { getUserProfile, events } = useData();
+  const { requestToMentor, isRequestLoading } = useMentorRequests(event, user);
+  const { getUserProfile, products, isLoadingProducts } = useData(); // Produkte holen
   const { canViewMentorProfiles, canViewStaffProfiles, canProcessMentorRequests, canRequestMentor } = usePermissions();
 
-  // Loading state for product gradient
-  const [productWithGradient, setProductWithGradient] = useState<Product | undefined>(event.ProductInfo);
-  const [isProductLoading, setIsProductLoading] = useState(false);
-
-  useEffect(() => {
-    if (event.ProductInfo) {
-      if (!event.ProductInfo.gradient) {
-        setIsProductLoading(true);
-        console.log(`Event ${event.id}: Product (ID: ${event.ProductInfo.id}, Name: ${event.ProductInfo.name}) is missing gradient. Generating...`);
-        const ensuredProduct = ensureProductGradient(event.ProductInfo);
-        setProductWithGradient(ensuredProduct);
-        setIsProductLoading(false);
-      } else {
-        setProductWithGradient(event.ProductInfo);
-        setIsProductLoading(false);
-      }
-    } else {
-      setProductWithGradient(undefined);
-      setIsProductLoading(false);
+  // Produkt aus globalem Cache holen
+  const product: Product | undefined = useMemo(() => {
+    if (isLoadingProducts || !products || !event.product_id) {
+      return undefined;
     }
-  }, [event.ProductInfo]);
+    return products.find(p => p.id === event.product_id);
+  }, [event.product_id, products, isLoadingProducts]);
+
+  // Skeleton-Loader anzeigen, wenn Produkte noch laden oder Produkt nicht gefunden
+  const showSkeleton = isLoadingProducts || (event.product_id && !product);
+  if (showSkeleton) {
+    return (
+      <div className="w-full min-h-[420px] max-w-xl mx-auto rounded-3xl bg-gray-100 dark:bg-gray-800 animate-pulse flex items-center justify-center">
+        <span className="text-lg text-muted-foreground">{language === "en" ? "Loading event…" : "Event wird geladen…"}</span>
+      </div>
+    );
+  }
+
+  // Fallback: Event ohne Produkt
+  if (!product && event.product_id === null) {
+    return (
+      <div className="w-full min-h-[420px] max-w-xl mx-auto rounded-3xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-muted-foreground">
+        {language === "en" ? "Event without product info" : "Veranstaltung ohne Produktinformation"}
+      </div>
+    );
+  }
+
+  // Produkt-Infos
+  const productName = product?.name;
+  const productIconName = product?.icon_name;
+  const productGradient = product?.gradient;
+  const productColor = productGradient || "#3b82f6";
+  const iconUrl = productIconName ? getIconByName(productIconName, theme === "dark") : undefined;
+  const firstColor = extractFirstColor(productGradient) || "#3b82f6";
+  const useWhiteText = isColorDark(firstColor);
 
   // DECLARE isPastEvent FIRST, before any other variables that might use it
   const isPastEvent = useMemo(() => isEventInPast(event), [event]);
   
   // State declarations
-  const [staffProfile, setStaffProfile] = useState<any>(null);
-  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
-  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [staffProfile, setStaffProfile] = React.useState<any>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = React.useState(false);
+  const [confirmModalOpen, setConfirmModalOpen] = React.useState(false);
 
   
   // Now declare other computed values that depend on isPastEvent
@@ -110,7 +123,7 @@ export const EventCard = ({
   const isDeclinedMentor = event.declinedMentors?.includes(userId || '') || false;
   
   // Load staff profile effect
-  useEffect(() => {
+  React.useEffect(() => {
     const loadStaffProfile = async () => {
       if (event.primaryStaffId && canViewStaffProfiles) {
         setIsLoadingProfile(true);
@@ -192,26 +205,8 @@ export const EventCard = ({
     }
   };
 
-  // Get product info from event
-  const product = productWithGradient;
-  const productName = product?.name;
-  const productIconName = product?.icon_name;
-  const productGradient = product?.gradient;
-  const productColor = productGradient || "#3b82f6";
-  const iconUrl = productIconName ? getIconByName(productIconName, theme === "dark") : undefined;
-
   // Determine text color for product name
-  const firstColor = extractFirstColor(productGradient) || "#3b82f6";
-  const useWhiteText = isColorDark(firstColor);
-
-  // Show skeleton if product data is being loaded/processed or is completely missing.
-  if (isProductLoading || !productWithGradient || !productName) {
-    return (
-      <div className="w-full min-h-[420px] max-w-xl mx-auto rounded-3xl bg-gray-100 dark:bg-gray-800 animate-pulse flex items-center justify-center">
-        <span className="text-lg text-muted-foreground">{language === "en" ? "Loading event…" : "Event wird geladen…"}</span>
-      </div>
-    );
-  }
+  const useWhiteTextFallback = isColorDark(firstColor);
 
   return (
     <Card
@@ -247,8 +242,8 @@ export const EventCard = ({
         <span
           className="font-semibold text-lg text-center"
           style={{
-            color: useWhiteText ? "#fff" : "#111",
-            textShadow: useWhiteText ? "0 1px 4px rgba(0,0,0,0.18)" : "none"
+            color: useWhiteTextFallback ? "#fff" : "#111",
+            textShadow: useWhiteTextFallback ? "0 1px 4px rgba(0,0,0,0.18)" : "none"
           }}
         >
           {productName}
