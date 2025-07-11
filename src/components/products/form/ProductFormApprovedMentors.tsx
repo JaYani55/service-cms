@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2 } from 'lucide-react';
+import { Lightbulb } from 'lucide-react';
 
 interface ProductFormApprovedMentorsProps {
   form: UseFormReturn<ProductFormValues>;
@@ -34,12 +35,28 @@ export function ProductFormApprovedMentors({
         <FormItem className="bg-muted/30 p-6 rounded-lg border border-border/50">
           <div className="mb-4">
             <FormLabel className="text-xl font-medium text-black block border-b pb-2">
-              {language === 'en' ? 'Approved Mentors' : 'Freigabe Mentoren'}
+              {language === 'en' ? 'Mentor Product Approval Mentors' : 'Produkt-Freigabe Mentoren'}
             </FormLabel>
-            <FormDescription className="text-base mt-2">
-              {language === 'en' 
-                ? 'Select mentors who are approved to work with this product'
-                : 'Wählen Sie Mentoren aus, die für dieses Produkt freigegeben sind'}
+            <FormDescription
+              className="relative flex items-center gap-3 text-base mt-2 font-medium rounded-lg px-5 py-3 bg-yellow-50 text-black dark:bg-yellow-900 dark:text-black shadow-sm"
+            >
+              <span className="absolute -left-6 top-1/2 -translate-y-1/2">
+                <span className="inline-flex items-center justify-center rounded-full bg-yellow-400 text-white shadow-lg h-10 w-10 border-2 border-yellow-300">
+                  <Lightbulb className="h-6 w-6" />
+                </span>
+              </span>
+              <span className="pl-8">
+                {language === 'en'
+                  ? <>
+                      Select mentors that are generally approved for this product.<br />
+                      The mentors for whom an event is <b>visible</b> can be determined <b>when creating an event</b>.
+                    </>
+                  : <>
+                      Wählen Sie Mentoren aus, die für dieses Produkt grundsätzlich freigegeben sind.<br />
+                      Für welche der hier freigebenen MentorInnen eine Veranstaltung <b>sichtbar</b> ist, kann <b>beim Erstellen einer Veranstaltung</b> bestimmt werden.
+                    </>
+                }
+              </span>
             </FormDescription>
           </div>
 

@@ -74,18 +74,14 @@ const VerwaltungCreateProduct = () => {
 
   return (
     <AdminPageLayout
-      title={language === "en" ? "Create New Product" : "Neues Produkt erstellen"}
-      description={language === "en" 
-        ? "Create and configure new products for the platform" 
-        : "Neue Produkte für die Plattform erstellen und konfigurieren"}
-      icon={Plus}
-      actions={
-        <BackButton 
-          label={getBackButtonLabel()}
-          onClick={() => navigate(backPath)}
-        />
-      }
+      title={null}
+      description={null}
+      icon={null}
+      actions={null}
     >
+      <div className="flex items-center justify-start mb-6">
+        <BackButton label={getBackButtonLabel()} onClick={() => navigate(backPath)} />
+      </div>
       <ProductManagementModal 
         embedded={true}
         onProductsChange={handleProductsChange}
