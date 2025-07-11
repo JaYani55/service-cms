@@ -2,6 +2,7 @@ import { EventCard } from "@/components/events/EventCard";
 import { Event } from "@/types/event";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useData } from "@/contexts/DataContext";
+import { ensureProductGradient } from "@/services/events/productService";
 
 interface EventsGridViewProps {
   events: Event[];
@@ -27,18 +28,29 @@ export const EventsGridView = ({
   refetchEvents
 }: EventsGridViewProps) => {
   const { language } = useTheme();
-  
-  if (events.length === 0) {
+
+  // Preprocess events to ensure ProductInfo.gradient is always present
+  const eventsWithGradients = events.map(event => {
+    if (event.ProductInfo) {
+      return {
+        ...event,
+        ProductInfo: ensureProductGradient(event.ProductInfo)
+      };
+    }
+    return event;
+  });
+
+  if (eventsWithGradients.length === 0) {
     return (
       <div className="text-center py-12">
         <p>{language === "en" ? "No events found" : "Keine Veranstaltungen gefunden"}</p>
       </div>
     );
   }
-  
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {events.map((event) => (
+      {eventsWithGradients.map((event) => (
         <EventCard
           key={event.id}
           event={event}

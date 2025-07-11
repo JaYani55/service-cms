@@ -280,7 +280,6 @@ export const fetchMentors = async (): Promise<Mentor[]> => {
 export const ensureProductGradient = (product: Product): Product => {
   // If gradient exists, keep it. Otherwise provide a default based on id
   if (!product.gradient) {
-    // Create a deterministic gradient based on product ID for consistency
     const colors = [
       ['#3b82f6', '#93c5fd'], // Blue
       ['#10b981', '#6ee7b7'], // Green
@@ -289,13 +288,14 @@ export const ensureProductGradient = (product: Product): Product => {
       ['#f97316', '#fdba74'], // Orange
       ['#ec4899', '#f9a8d4']  // Pink
     ];
-    
     // Use product ID to select a color pair (with wrapping)
-    const colorPair = colors[product.id % colors.length];
-    
-    // Set default gradient
+    let colorPair;
+    if (typeof product.id === 'number' && !isNaN(product.id)) {
+      colorPair = colors[product.id % colors.length];
+    } else {
+      colorPair = colors[0]; // fallback to first color pair if id is missing/invalid
+    }
     product.gradient = `linear-gradient(90deg, ${colorPair[0]}, ${colorPair[1]})`;
   }
-  
   return product;
 };
