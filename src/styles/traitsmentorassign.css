@@ -1,0 +1,83 @@
+:root {
+  --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.8));
+  --gradient-secondary: linear-gradient(135deg, hsl(var(--secondary)), hsl(var(--secondary) / 0.8));
+  --gradient-accent: linear-gradient(135deg, hsl(var(--accent)), hsl(var(--accent) / 0.8));
+  
+  --card-hover-transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  --card-shadow-hover: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  --card-shadow: 0 4px 10px -2px rgba(0, 0, 0, 0.1);
+  
+  --gradient-bg: radial-gradient(circle at top right, 
+    hsl(var(--primary) / 0.1), 
+    transparent 70%),
+    radial-gradient(circle at bottom left, 
+    hsl(var(--secondary) / 0.1), 
+    transparent 70%);
+}
+
+.admin-container {
+  background-image: var(--gradient-bg);
+  background-attachment: fixed;
+}
+
+.dragging {
+  cursor: grabbing !important;
+  filter: brightness(1.05);
+  box-shadow: var(--card-shadow-hover);
+}
+
+.mentor-card {
+  cursor: grab;
+  transition: var(--card-hover-transition);
+  box-shadow: var(--card-shadow);
+}
+
+.mentor-card:hover {
+  box-shadow: var(--card-shadow-hover);
+  transform: translateY(-2px);
+}
+
+.group-card {
+  transition: var(--card-hover-transition);
+  box-shadow: var(--card-shadow);
+}
+
+.group-card:hover {
+  box-shadow: var(--card-shadow-hover);
+  transform: translateY(-2px);
+}
+
+.drop-indicator {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Group card animations */
+.group-card-header {
+  position: relative;
+  overflow: hidden;
+}
+
+.group-card-header::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to right, rgba(255,255,255,0.1), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.5s ease;
+}
+
+.group-card:hover .group-card-header::after {
+  transform: translateX(100%);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}

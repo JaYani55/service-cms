@@ -1,0 +1,53 @@
+.ThreeDotSpinner-container {
+  /* custom properties set via inline style in React */
+  --uib-size: 40px;
+  --uib-color: black;
+  --uib-speed: 1.3s;
+  --uib-dot-size: 25%;
+
+  position: relative;
+  display: inline-block;
+  width: var(--uib-size);
+  height: var(--uib-size);
+  animation: spin var(--uib-speed) infinite linear;
+}
+
+.ThreeDotSpinner-dot {
+  position: absolute;
+  left: calc(50% - var(--uib-dot-size) / 2);
+  width: var(--uib-dot-size);
+  height: 100%;
+}
+
+/* the circle itself */
+.ThreeDotSpinner-dot::after {
+  content: '';
+  display: block;
+  width: 100%;
+  padding-bottom: 100%; /* keep it square */
+  background-color: var(--uib-color);
+  border-radius: 50%;
+  transform-origin: center top;
+  transition: background-color 0.3s ease;
+}
+
+/* position the three dots 120° apart */
+.ThreeDotSpinner-dot:nth-child(1) { transform: rotate(120deg); }
+.ThreeDotSpinner-dot:nth-child(2) { transform: rotate(-120deg); }
+
+/* all dots wobble (up/down) as they spin */
+.ThreeDotSpinner-dot:nth-child(1)::after,
+.ThreeDotSpinner-dot:nth-child(2)::after,
+.ThreeDotSpinner-dot:nth-child(3)::after {
+  animation: wobble var(--uib-speed) infinite ease-in-out;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes wobble {
+  0%, 100% { transform: translateY(0%); }
+  50%      { transform: translateY(65%); }
+}

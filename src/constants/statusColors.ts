@@ -1,0 +1,1 @@
+// Event status logic is obsolete, and the file is now empty.

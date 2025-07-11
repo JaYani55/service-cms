@@ -1,0 +1,367 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+ 
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 214 80% 45%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 214 80% 45%;
+    --radius: 0.75rem;
+  }
+ 
+  .dark {
+    --background: 240 10% 4%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 47.4% 11.2%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 47.4% 11.2%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground min-h-screen;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Enhanced focus indicators */
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /* Specific focus styles for different elements */
+  button:focus-visible,
+  a:focus-visible,
+  [role="button"]:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-background/80 backdrop-blur-lg border border-border/50 shadow-lg;
+  }
+
+  .dark .glass {
+    @apply bg-background/50 backdrop-blur-lg border border-border/60 shadow-lg;
+  }
+
+  .fade-in {
+    @apply animate-fadeIn;
+  }
+
+  .slide-in-from-top {
+    animation: slideInFromTop 0.3s ease forwards;
+  }
+
+  /* Status badge styling - IMPROVED */
+  .status-badge {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium transition-all shadow-sm border;
+    /* Ensure minimum 3:1 contrast ratio */
+    min-height: 24px;
+    line-height: 1.2;
+  }
+
+  /* Light mode - improved contrast */
+  .status-new {
+    @apply border-blue-700 bg-blue-50 text-blue-900;
+  }
+
+  .status-firstRequests {
+    @apply border-purple-700 bg-purple-50 text-purple-900;
+  }
+
+  .status-successPartly {
+    @apply border-amber-700 bg-amber-50 text-amber-900;
+  }
+
+  .status-successComplete {
+    @apply border-green-700 bg-green-50 text-green-900;
+  }
+
+  .status-locked {
+    @apply border-gray-700 bg-gray-50 text-gray-900;
+  }
+
+  /* Dark mode - improved contrast */
+  .dark .status-new {
+    @apply border-blue-400 bg-blue-950 text-blue-100;
+  }
+
+  .dark .status-firstRequests {
+    @apply border-purple-400 bg-purple-950 text-purple-100;
+  }
+
+  .dark .status-successPartly {
+    @apply border-amber-400 bg-amber-950 text-amber-100;
+  }
+
+  .dark .status-successComplete {
+    @apply border-green-400 bg-green-950 text-green-100;
+  }
+
+  .dark .status-locked {
+    @apply border-gray-400 bg-gray-950 text-gray-100;
+  }
+
+  /* Make sure calendar events are visible in dark mode */
+  .dark .calendar-event {
+    @apply text-foreground border-opacity-60 bg-opacity-40;
+  }
+
+  /* Enhanced Button hover effects */
+  button {
+    @apply transition-all duration-200;
+  }
+
+  .rounded-button {
+    @apply rounded-full hover:shadow-md hover:translate-y-[-1px] active:translate-y-[0px];
+  }
+
+  /* Enhanced Navigation buttons */
+  .nav-button {
+    @apply px-3 py-2 rounded-md text-sm font-medium text-gray-700 bg-transparent shadow-none transition-all;
+  }
+
+  /* Hover state */
+  .nav-button:hover,
+  .nav-button:focus-visible {
+    @apply bg-[#c8d5f6] text-gray-900 shadow;
+  }
+
+  /* Active state */
+  .nav-button-active {
+    @apply bg-[#c8d5f6] text-gray-900 shadow-md;
+  }
+
+  /* Dark mode */
+  .dark .nav-button {
+    @apply text-gray-200 bg-transparent;
+  }
+  .dark .nav-button:hover,
+  .dark .nav-button:focus-visible {
+    @apply bg-[#2d3748] text-gray-50;
+  }
+  .dark .nav-button-active {
+    @apply bg-[#2d3748] text-gray-50 shadow-md;
+  }
+
+  /* Enhance dark mode styles */
+  .dark .bg-card {
+    @apply bg-gray-800/70;
+  }
+
+  /* Instead, use a more specific class for dark mode borders */
+  .dark-mode-border {
+    @apply border-gray-700;
+  }
+
+  .dark .glass {
+    @apply bg-gray-900/70;
+  }
+
+  /* IMPROVED: Professional status badges with better contrast and readability */
+  [class*="status-"] {
+    @apply border transition-all font-medium shadow-sm;
+  }
+
+  /* Screen reader only content */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .sr-only:focus,
+  .focus\:not-sr-only:focus {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: inherit;
+    margin: inherit;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+
+  /* Skip link specific styles */
+  .skip-link {
+    position: absolute;
+    top: -40px;
+    left: 6px;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    padding: 8px;
+    text-decoration: none;
+    border-radius: 4px;
+    z-index: 1000;
+    transition: top 0.3s;
+  }
+
+  .skip-link:focus {
+    top: 6px;
+  }
+
+  .mentor-count-btn {
+    @apply border border-gray-300 hover:border-blue-400 focus-visible:border-blue-500;
+    /* You can tweak the border color as you like */
+  }
+  .dark .mentor-count-btn {
+    @apply border-gray-600 hover:border-blue-300 focus-visible:border-blue-400;
+  }
+}
+
+@layer utilities {
+  .mobile-card {
+    @apply border rounded-lg p-4 shadow-sm;
+  }
+  
+  /* Better responsive text sizing with intermediate breakpoints */
+  .responsive-text-lg {
+    @apply text-sm md:text-base lg:text-lg;
+  }
+  
+  .responsive-text-xl {
+    @apply text-base md:text-lg lg:text-xl;
+  }
+  
+  .responsive-text-2xl {
+    @apply text-lg md:text-xl lg:text-2xl;
+  }
+
+  /* Improved touch targets for mobile and tablets */
+  .mobile-touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+  
+  /* Better spacing for layouts on smaller screens */
+  .mobile-stack > * {
+    @apply w-full mb-2 last:mb-0;
+  }
+  
+  /* Add tablet-specific layout adjustments */
+  .tablet-layout {
+    @apply p-4 gap-4;
+  }
+}
+
+/* Animations and keyframes */
+@keyframes slideInFromTop {
+  0% {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Additional styling for calendar */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Improved table responsiveness */
+@media (max-width: 1024px) {
+  .responsive-table {
+    @apply hidden;
+  }
+  
+  .mobile-card-list {
+    @apply block;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --border: 0 0% 20%;
+    --ring: 0 0% 0%;
+  }
+  
+  .dark {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --border: 0 0% 80%;
+  }
+  
+  /* Ensure buttons have visible borders in high contrast */
+  button, .btn {
+    border: 2px solid currentColor;
+  }
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  /* Keep essential transitions but make them faster */
+  .hover-underline-animation:after {
+    transition-duration: 0.1s;
+  }
+}

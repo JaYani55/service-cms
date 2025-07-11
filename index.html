@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>inklu-connect mentorbooking</title>
+    <meta name="description" content="mentor booking system" />
+    <meta name="author" content="inklusolutions" />
+    <!--<meta property="og:image" content="/og-image.png" /> -->
+    <style>
+      #splash-spinner {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background: #fff;
+        z-index: 9999;
+        position: fixed;
+        inset: 0;
+      }
+      .ThreeDotSpinner-container {
+        --uib-size: 40px;
+        --uib-color: #3bb1c0;
+        --uib-speed: 1.5s;
+        --uib-dot-size: 25%;
+        position: relative;
+        display: inline-block;
+        width: var(--uib-size);
+        height: var(--uib-size);
+        animation: spin var(--uib-speed) infinite linear;
+      }
+      .ThreeDotSpinner-dot {
+        position: absolute;
+        left: calc(50% - var(--uib-dot-size) / 2);
+        width: var(--uib-dot-size);
+        height: 100%;
+      }
+      .ThreeDotSpinner-dot::after {
+        content: '';
+        display: block;
+        width: 100%;
+        padding-bottom: 100%;
+        background-color: var(--uib-color);
+        border-radius: 50%;
+        transform-origin: center top;
+        transition: background-color 0.3s ease;
+      }
+      .ThreeDotSpinner-dot:nth-child(1) { transform: rotate(120deg); }
+      .ThreeDotSpinner-dot:nth-child(2) { transform: rotate(-120deg); }
+      .ThreeDotSpinner-dot:nth-child(1)::after,
+      .ThreeDotSpinner-dot:nth-child(2)::after,
+      .ThreeDotSpinner-dot:nth-child(3)::after {
+        animation: wobble var(--uib-speed) infinite ease-in-out;
+      }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+      }
+      @keyframes wobble {
+        0%, 100% { transform: translateY(0%); }
+        50%      { transform: translateY(65%); }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="splash-spinner">
+      <div class="ThreeDotSpinner-container" style="--uib-size:40px;--uib-color:#3bb1c0;--uib-speed:1.5s;--uib-dot-size:25%;">
+        <div class="ThreeDotSpinner-dot"></div>
+        <div class="ThreeDotSpinner-dot"></div>
+        <div class="ThreeDotSpinner-dot"></div>
+      </div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
