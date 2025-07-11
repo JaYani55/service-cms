@@ -103,14 +103,20 @@ const loadAppData = async (session: Session, queryClient: QueryClient) => {
       const staffProfileUrls = await Promise.all(
         [...allStaffIds].map(async (staffId) => {
           try {
-            // Try to get staff data from SeaTable
+            // Prüfe, ob staffId auch Mentor ist, bevor getMentorById aufgerufen wird
+            // Hier ist KEINE direkte Rollenprüfung möglich, da nur die ID bekannt ist.
+            // Daher: Versuche getMentorById, aber ignoriere Fehler, falls staffId kein Mentor ist.
             const seatableClient = await import('@/lib/seatableClient').then(m => m.seatableClient);
             const staffData = await seatableClient.getMentorById(staffId);
+            // staffData ist nur dann nicht null, wenn staffId ein Mentor ist
             return { 
               user_id: staffId,
               profile_picture_url: staffData?.Profilbild || null
             };
           } catch (err) {
+            // Fehler abfangen und null zurückgeben, falls staffId kein Mentor ist
+            // Logge den Fehler nur, wenn du Debug brauchst
+            // console.error(`[LoadAppData-Events] Error fetching staff profile for ${staffId}:`, err);
             return { user_id: staffId, profile_picture_url: null };
           }
         })

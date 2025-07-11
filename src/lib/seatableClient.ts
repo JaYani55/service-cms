@@ -399,38 +399,48 @@ class SimpleSeaTableClient {
     }
   }
 
-  // Also update the getFilteredRowsWithMapping method
+  // Also update the getFilteredRowsWithMapping method (Dies ist die geänderte Funktion von oben)
   async getFilteredRowsWithMapping(tableName: string, filterColumn: string, filterValue: string): Promise<SeaTableRow[]> {
     try {
       await this.ensureValidToken();
-      
-      // First, get the table structure to map column names to keys
+
+      console.log(`[SeaTable-Debug] getFilteredRowsWithMapping: Tabelle: '${tableName}', Filterspalte (Name): '${filterColumn}', Filterwert: '${filterValue}'`);
+
+      // 1. Zuerst die Tabellenstruktur (Metadaten) anfordern
       const tableStructure = await this.getTableStructure(tableName);
       if (!tableStructure) {
-        throw new Error(`Table ${tableName} not found`);
+        console.error(`[SeaTable-Debug] FEHLER: Tabelle '${tableName}' nicht in Metadaten gefunden.`);
+        throw new Error(`Tabelle '${tableName}' nicht gefunden.`);
       }
-      
-      // Find the column key for the given column name
+
+      console.log(`[SeaTable-Debug] Metadaten für Tabelle '${tableName}' geladen. Spaltenanzahl: ${tableStructure.columns.length}`);
+      // Zeige alle Spaltennamen und ihre Keys aus den Metadaten an
+      console.log(`[SeaTable-Debug] Verfügbare Spalten (Name -> Key):`, 
+                    tableStructure.columns.map(c => `${c.name} -> ${c.key}`));
+
+      // 2. Finde den internen SeaTable-Schlüssel (Key) für die gesuchte Spalte
       const columnMapping = tableStructure.columns.find(col => col.name === filterColumn);
+
       if (!columnMapping) {
-        console.error(`[SeaTable] Column '${filterColumn}' not found in table '${tableName}'`);
-        console.log('[SeaTable] Available columns:', tableStructure.columns.map(c => c.name));
-        throw new Error(`Column '${filterColumn}' not found`);
+        console.error(`[SeaTable-Debug] FEHLER: Spalte '${filterColumn}' wurde NICHT in der Metadaten von Tabelle '${tableName}' gefunden.`);
+        // Zeige nochmals alle verfügbaren Spalten, um Vergleich zu erleichtern
+        console.log(`[SeaTable-Debug] Tatsächlich verfügbare Spaltennamen:`, tableStructure.columns.map(c => c.name));
+        throw new Error(`Spalte '${filterColumn}' nicht in Metadaten gefunden.`);
       }
-      
+
       const columnKey = columnMapping.key;
-      console.log(`[SeaTable] Mapped column '${filterColumn}' to key '${columnKey}'`);
-      
-      // Use the NEW v2 API gateway SQL endpoint with the column KEY
+      console.log(`[SeaTable-Debug] Spalte '${filterColumn}' (Name) wurde dem internen Key '${columnKey}' zugeordnet.`);
+
+      // 3. Baue die SQL-Abfrage mit dem internen Key
       const url = `https://cloud.seatable.io/api-gateway/api/v2/dtables/${this.dtableUuid}/sql/`;
-      
+
       const requestData = {
         sql: `SELECT * FROM \`${tableName}\` WHERE \`${columnKey}\` = '${filterValue}'`
       };
-      
-      console.log('[SeaTable] SQL Query with mapped column:', requestData.sql);
-      console.log('[SeaTable] Looking for:', { filterColumn, columnKey, filterValue });
-      
+
+      console.log('[SeaTable-Debug] Folgende SQL-Abfrage wird an SeaTable gesendet:', requestData.sql);
+
+      // 4. Sende die SQL-Abfrage
       const response = await axios.post(url, requestData, {
         headers: {
           'Authorization': `Bearer ${this.baseToken}`,
@@ -440,7 +450,7 @@ class SimpleSeaTableClient {
       });
 
       const results = response.data.results || [];
-      console.log('[SeaTable] SQL Query successful, results:', results.length);
+      console.log('[SeaTable-Debug] SQL-Abfrage erfolgreich, Ergebnisse gefunden:', results.length);
       
       // Map the results back to use column names instead of keys AND map option values
       const mappedResults = results.map(row => {
@@ -466,40 +476,41 @@ class SimpleSeaTableClient {
         return mappedRow;
       });
       
-      console.log('[SeaTable] Mapped results with option values:', mappedResults.length);
+      console.log('[SeaTable-Debug] Gemappte Ergebnisse mit Optionen:', mappedResults.length);
       return mappedResults;
       
     } catch (err: any) {
-      console.log('[SeaTable] SQL query with mapping failed, trying fallback...');
-      console.error('[SeaTable] SQL Error details:', {
+      console.error('[SeaTable-Debug] SQL-Abfrage mit Mapping fehlgeschlagen, versuche Fallback...');
+      console.error('[SeaTable-Debug] Details des SQL-Fehlers:', {
         status: err.response?.status,
         data: err.response?.data,
-        message: err.message
+        message: err.message,
+        error_message_from_seatable: err.response?.data?.error_message // Oft die wichtigste Info
       });
       
       // Fallback: Get all rows with mapping and filter locally
       try {
         const allRows = await this.getTableRowsWithMapping(tableName);
-        console.log('[SeaTable] Fallback: Got', allRows.length, 'total rows with mapping');
+        console.log('[SeaTable-Debug] Fallback: Habe', allRows.length, 'Gesamtzeilen.');
         
         if (allRows.length > 0) {
-          console.log('[SeaTable] Fallback: Sample row columns:', Object.keys(allRows[0]));
-          console.log('[SeaTable] Fallback: Looking for', filterColumn, '=', filterValue);
+          console.log('[SeaTable-Debug] Fallback: Beispielzeile Spalten:', Object.keys(allRows[0]));
+          console.log('[SeaTable-Debug] Fallback: Suche nach', filterColumn, '=', filterValue);
           
           // Check if the column exists
           const hasColumn = Object.keys(allRows[0]).includes(filterColumn);
-          console.log('[SeaTable] Fallback: Column', filterColumn, 'exists:', hasColumn);
+          console.log('[SeaTable-Debug] Fallback: Spalte', filterColumn, 'existiert (clientseitig):', hasColumn);
           
           if (!hasColumn) {
-            console.log('[SeaTable] Fallback: Available columns:', Object.keys(allRows[0]));
+            console.log('[SeaTable-Debug] Fallback: Verfügbare Spalten (clientseitig):', Object.keys(allRows[0]));
           }
         }
         
         const filtered = allRows.filter(row => row[filterColumn] === filterValue);
-        console.log('[SeaTable] Local filtering successful, filtered rows:', filtered.length);
+        console.log('[SeaTable-Debug] Lokale Filterung erfolgreich, gefilterte Zeilen:', filtered.length);
         return filtered;
       } catch (fallbackErr) {
-        console.error('[SeaTable] Both SQL and local filtering failed');
+        console.error('[SeaTable-Debug] Sowohl SQL-Abfrage als auch lokale Filterung fehlgeschlagen');
         return [];
       }
     }
