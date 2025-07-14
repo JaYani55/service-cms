@@ -89,27 +89,27 @@ export const usePermissions = (): Permissions => {
       canCreateEvents: hasStaffAccess,
       canDeleteEvents: hasStaffAccess,
       canEditEvents: hasStaffAccess,
-      
+
       // View permissions
       canViewAllProfiles: isAdminOrManagement,
       canViewMentorProfiles: hasStaffAccess,
       canViewStaffProfiles,
       canViewAdminData: isAdmin,
-      canEditOwnProfile: true,
-      canEditAnyProfile: isAdminOrManagement,
+      canEditOwnProfile: false, // No one can edit their own profile
+      canEditAnyProfile: isAdminOrManagement, // Only super-admin, admin, mentoringmanagement
       canEditUsername: isAdminOrManagement,
-      
+
       // Event permissions
       canViewPendingRequests: hasStaffAccess,
       canProcessMentorRequests: hasStaffAccess,
       canAssignMentors: hasStaffAccess, // <-- use this only
-      
+
       // Access permissions
       canAccessVerwaltung: hasStaffAccess,
-      
+
       // Animal icon permissions
       canChangeAnimalIcons: isMentoringManagement || isAdmin,
-      
+
       // Data access
       getSeaTableView: () => isAdmin ? 'intern' : 'extern',
       canRequestMentor,

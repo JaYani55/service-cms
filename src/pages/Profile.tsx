@@ -138,9 +138,7 @@ const Profile = () => {
   };
 
   const initials = getInitials(user, seatableMentorData);
-  const displayName = seatableMentorData?.Vorname && seatableMentorData?.Nachname 
-    ? `${seatableMentorData.Vorname} ${seatableMentorData.Nachname}`
-    : displayUsername;
+  const displayName = user?.Username || displayUsername;
 
   // Helper function to format field values (for traits and other data)
   const formatFieldValue = (value: any, fieldName: string): string => {
@@ -181,22 +179,30 @@ const Profile = () => {
   console.log('[Profile] Showing unified profile data');
   return (
     <div className="space-y-6 fade-in max-w-none">
-      {/* Profile Photo */}
-      <div className="flex justify-center">
-        <ProfilePhoto
-          profilePictureUrl={user?.pfp_url} // Add this
-          displayName={displayName}
-          initials={initials}
-          role={user?.role} // ✅ Use profile owner's role, not viewer's role
-          isOwnProfile={true}
-          language={language}
-          selectedAnimalIcon={currentAnimalIcon} // ✅ Use local state
-          userId={user?.id}
-          onImageUploaded={async (url: string) => {
-            console.log('Profile picture uploaded:', url);
-            // TODO: Save the profile picture URL to Supabase user profile
-          }}
-        />
+      {/* Profile Photo + Animal Icon Hint */}
+      <div className="flex flex-col items-center">
+        <div className="relative flex items-center justify-center">
+          <ProfilePhoto
+            profilePictureUrl={user?.pfp_url}
+            displayName={displayName}
+            initials={initials}
+            role={user?.role}
+            isOwnProfile={true}
+            language={language}
+            selectedAnimalIcon={currentAnimalIcon}
+            userId={user?.id}
+            onImageUploaded={async (url: string) => {
+              console.log('Profile picture uploaded:', url);
+              // TODO: Save the profile picture URL to Supabase user profile
+            }}
+          />
+          {/* Red hint if no animal icon and user can change icons */}
+          {!currentAnimalIcon && permissions.canChangeAnimalIcons && (
+            <span className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-red-100 text-red-700 border border-red-300 rounded px-2 py-1 text-xs font-semibold shadow-md whitespace-nowrap">
+              Set an avatar for the user!
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Unified Profile Data */}

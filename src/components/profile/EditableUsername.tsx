@@ -199,11 +199,11 @@ export const EditableUsername: React.FC<EditableUsernameProps> = ({
     <div className="flex items-center gap-3">
       {/* Icon für Platzhalter-Status */}
       {isCurrentlyPlaceholder && (
-          <UserRoundMinus // Oder Info, je nach Präferenz
-            className={`h-6 w-6 ${canEditUsername ? 'text-blue-500' : 'text-gray-400'}`}
-          />
+        <UserRoundMinus // Oder Info, je nach Präferenz
+          className={`h-6 w-6 ${canEditUsername ? 'text-blue-500' : 'text-gray-400'}`}
+        />
       )}
-      
+
       {/* Haupt-Anzeigename */}
       <h1 className={`text-2xl font-semibold leading-tight ${isCurrentlyPlaceholder ? (canEditUsername ? 'text-blue-600' : 'text-gray-700') : 'text-gray-900'}`}
           role="heading"
@@ -218,11 +218,11 @@ export const EditableUsername: React.FC<EditableUsernameProps> = ({
           variant="ghost"
           onClick={() => setIsEditing(true)}
           disabled={isUpdating}
-          className="h-9 w-9 p-0 hover:bg-gray-100" // Sanfterer Hover für Ghost Button
+          className="h-9 w-9 p-0 hover:bg-gray-100"
           aria-label={language === 'de' ? 'Anzeigename bearbeiten' : 'Edit username'}
-          title={language === 'de' ? 'Public Anzeigename festlegen' : 'Set public display name'} // Tooltip
+          title={language === 'de' ? 'Public Anzeigename festlegen' : 'Set public display name'}
         >
-          <Pencil className="h-4 w-4 text-gray-500" aria-hidden="true" /> {/* Bleistift Icon in dezenter Farbe */}
+          <Pencil className="h-4 w-4 text-red-600" aria-hidden="true" /> {/* Pencil icon in red */}
         </Button>
       )}
 

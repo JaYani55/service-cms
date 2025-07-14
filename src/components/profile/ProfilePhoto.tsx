@@ -153,7 +153,7 @@ export const ProfilePhoto = ({
             aria-expanded={showIconEditor}
             aria-controls="profile-icon-editor"
           >
-            <Pencil className="h-4 w-4 text-gray-600" aria-hidden="true" />
+            <Pencil className="h-4 w-4 text-red-600" aria-hidden="true" />
           </button>
         )}
       </div>

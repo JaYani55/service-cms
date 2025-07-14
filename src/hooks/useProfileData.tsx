@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { usePermissions } from '@/hooks/usePermissions';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSeatableMentors } from '@/hooks/useSeatableMentors';
@@ -15,6 +16,8 @@ interface ProfileUser {
 export const useProfileData = (language: 'en' | 'de') => {
   const { userId } = useParams<{ userId: string }>();
   const { user: currentUser } = useAuth();
+  // Permissions
+  const { canEditUsername } = usePermissions();
   const [isLoading, setIsLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
   const [accessChecked, setAccessChecked] = useState(false);
@@ -171,7 +174,7 @@ export const useProfileData = (language: 'en' | 'de') => {
 
   // Update username function
   const updateUsername = useCallback(async (newUsername: string): Promise<boolean> => {
-    if (!targetUserId || !isOwnProfile) return false;
+    if (!targetUserId || (!isOwnProfile && !canEditUsername)) return false;
 
     try {
       const { error } = await supabase
