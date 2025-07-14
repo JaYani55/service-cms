@@ -134,22 +134,8 @@ const EditEvent = () => {
                           amount_requiredmentors: values.amount_requiredmentors,
                        }) : 'new');
       
-      // Get product details if a product is selected
-      let productInfo = null;
-      if (values.product_id) {
-        const productDetails = await fetchProductById(values.product_id);
-        if (productDetails) {
-          productInfo = {
-            id: productDetails.id,
-            name: productDetails.name,
-            icon_name: productDetails.icon_name,
-            gradient: productDetails.gradient,
-            description_de: productDetails.description_de,
-            description_effort: productDetails.description_effort,
-          };
-        }
-      }
-      
+      // Get product details if a product is selected (do not send ProductInfo to Supabase)
+      // You can still fetch product details if needed for local use, but do not include in update payload
       const { error } = await supabase
         .from('mentorbooking_events')
         .update({
@@ -165,7 +151,6 @@ const EditEvent = () => {
           mode: values.mode || 'online',
           amount_requiredmentors: values.amount_requiredmentors,
           product_id: values.product_id || null,
-          ProductInfo: productInfo,
           teams_link: values.teams_link || "",
         })
         .eq('id', id);
