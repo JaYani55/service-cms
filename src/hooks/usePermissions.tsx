@@ -40,6 +40,9 @@ export interface Permissions {
   // Mentor permissions
   canRequestMentor: (event: Event, userId: string) => boolean; // <-- Add this line
   canMentorViewEvent: (event: { initial_selected_mentors: string[] }) => boolean; // <-- New helper
+
+  // Role check
+  hasRole: (role: 'staff' | 'mentor' | 'admin') => boolean;
 }
 
 export const usePermissions = (): Permissions => {
@@ -51,6 +54,19 @@ export const usePermissions = (): Permissions => {
     const hasStaffAccess = hasStaffPermissions(user?.role);
     const isMentor = user?.role === UserRole.MENTOR;
     const isMentoringManagement = user?.role === UserRole.MENTORINGMANAGEMENT;
+
+    const hasRole = (role: 'staff' | 'mentor' | 'admin') => {
+      switch (role) {
+        case 'staff':
+          return hasStaffAccess;
+        case 'mentor':
+          return isMentor;
+        case 'admin':
+          return isAdmin;
+        default:
+          return false;
+      }
+    };
 
     // Define your logic for staff profile viewing here:
     // Example: Only admins and management can view staff profiles
@@ -102,18 +118,27 @@ export const usePermissions = (): Permissions => {
       // Event permissions
       canViewPendingRequests: hasStaffAccess,
       canProcessMentorRequests: hasStaffAccess,
-      canAssignMentors: hasStaffAccess, // <-- use this only
+      canAssignMentors: isMentoringManagement,
 
       // Access permissions
       canAccessVerwaltung: hasStaffAccess,
 
       // Animal icon permissions
-      canChangeAnimalIcons: isMentoringManagement || isAdmin,
+      canChangeAnimalIcons: isAdmin,
 
       // Data access
-      getSeaTableView: () => isAdmin ? 'intern' : 'extern',
+      getSeaTableView: () => {
+        if (isAdmin) return 'ADMIN_VIEW';
+        if (isMentoringManagement) return 'MENTORING_MANAGEMENT_VIEW';
+        return 'DEFAULT_VIEW';
+      },
+
+      // Mentor permissions
       canRequestMentor,
       canMentorViewEvent,
+
+      // Role check
+      hasRole,
     };
-  }, [user?.role, user?.id]);
+  }, [user]);
 };

@@ -1,9 +1,10 @@
 import React from 'react';
 import { Button } from "@/components/ui/button";
-import { X, Save } from "lucide-react";
+import { X, Save, FilePlus } from "lucide-react";
 import { useTheme } from '@/contexts/ThemeContext';
 import { Product } from '@/services/events/productService';
 import { cn } from "@/lib/utils";
+import { useNavigate } from 'react-router-dom';
 
 interface ProductFormHeaderProps {
   editingProduct: Product | null;
@@ -19,7 +20,14 @@ export function ProductFormHeader({
   isLoading
 }: ProductFormHeaderProps) {
   const { language } = useTheme();
+  const navigate = useNavigate();
   
+  const handleCreatePage = () => {
+    if (editingProduct) {
+      navigate(`/pagebuilder/${editingProduct.id}`);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4 mb-8">
       {/* Title and close button */}
@@ -48,6 +56,17 @@ export function ProductFormHeader({
       
       {/* Action buttons */}
       <div className="flex items-center justify-end gap-3 pt-1">
+        {editingProduct && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleCreatePage}
+            className="px-5"
+          >
+            <FilePlus className="h-4 w-4 mr-2" />
+            Produktseite erstellen
+          </Button>
+        )}
         <Button
           type="button"
           variant="outline"

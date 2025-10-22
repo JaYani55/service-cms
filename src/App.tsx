@@ -23,6 +23,7 @@ import ProductDetail from "./pages/ProductDetail";
 import NotFound from "./pages/NotFound";
 import TestLoader from "./pages/TestLoader";
 import Info from "./pages/Info";
+import PageBuilder from "./pages/PageBuilder";
 
 // Import components
 import Layout from "./components/layout/Layout";
@@ -186,54 +187,28 @@ const AppContent = () => {
              
           />
           <Route
-            path="/Info"
+            path="/info"
             element={
               <ProtectedRoute>
                 <Info />
               </ProtectedRoute>
             }
           />
+          <Route 
+            path="/pagebuilder/:id" 
+            element={
+              <ProtectedRoute>
+                <PageBuilder />
+              </ProtectedRoute>
+            } 
+          />
 
-          <Route 
-            path="/verwaltung" 
-            element={
-              <ProtectedRoute>
-                <Verwaltung />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/verwaltung/add-mentor" 
-            element={
-              <ProtectedRoute>
-                <VerwaltungAddMentor />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/verwaltung/all-mentors" 
-            element={
-              <ProtectedRoute>
-                <VerwaltungAllMentors />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/verwaltung/all-products" 
-            element={
-              <ProtectedRoute>
-                <VerwaltungAllProducts />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/verwaltung/create-product" 
-            element={
-              <ProtectedRoute>
-                <VerwaltungCreateProduct />
-              </ProtectedRoute>
-            } 
-          />
+          {/* Verwaltung Routes */}
+          <Route path="/verwaltung" element={<ProtectedRoute requiredRole="staff"><Verwaltung /></ProtectedRoute>} />
+          <Route path="/verwaltung/add-mentor" element={<ProtectedRoute requiredRole="staff"><VerwaltungAddMentor /></ProtectedRoute>} />
+          <Route path="/verwaltung/all-mentors" element={<ProtectedRoute requiredRole="staff"><VerwaltungAllMentors /></ProtectedRoute>} />
+          <Route path="/verwaltung/all-products" element={<ProtectedRoute requiredRole="staff"><VerwaltungAllProducts /></ProtectedRoute>} />
+          <Route path="/verwaltung/create-product" element={<ProtectedRoute requiredRole="staff"><VerwaltungCreateProduct /></ProtectedRoute>} />
           <Route 
             path="/verwaltung/product/:productId" 
             element={
@@ -260,7 +235,7 @@ const AppContent = () => {
           />
           <Route path="/seatable-debug" element={<SeaTableDebugger />} />
           <Route path="/seatable-test" element={<SeaTableDataTest />} />
-          <Route path="/test-loader" element={<TestLoader />} />
+          <Route path="/test-loader" element={<ProtectedRoute><TestLoader /></ProtectedRoute>} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
