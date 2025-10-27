@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ImageUploader } from './ImageUploader';
+import { Trash2 } from 'lucide-react';
+import { Card } from '@/components/ui/card';
 
 interface ContentBlockEditorProps {
   block: ContentBlock;
@@ -20,11 +23,27 @@ export const ContentBlockEditor: React.FC<ContentBlockEditorProps> = ({
   form,
 }) => {
   return (
-    <div className="space-y-2 p-2 border rounded bg-background">
+    <Card className="p-4 space-y-4 bg-muted/30">
       <div className="flex justify-between items-center">
-        <Label className="text-sm font-semibold">Block Type: {block.type}</Label>
-        <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
-          Remove Block
+        <Label className="text-base font-semibold flex items-center space-x-2">
+          <span className="text-muted-foreground">
+            {block.type === 'text' && '📝'}
+            {block.type === 'image' && '🖼️'}
+            {block.type === 'quote' && '💬'}
+            {block.type === 'list' && '📋'}
+            {block.type === 'video' && '🎥'}
+          </span>
+          <span>
+            {block.type === 'text' && 'Text Block'}
+            {block.type === 'image' && 'Image Block'}
+            {block.type === 'quote' && 'Quote Block'}
+            {block.type === 'list' && 'List Block'}
+            {block.type === 'video' && 'Video Block'}
+          </span>
+        </Label>
+        <Button type="button" variant="destructive" size="sm" onClick={onRemove}>
+          <Trash2 className="h-4 w-4 mr-1" />
+          Entfernen
         </Button>
       </div>
 
@@ -58,31 +77,53 @@ export const ContentBlockEditor: React.FC<ContentBlockEditorProps> = ({
 
       {block.type === 'image' && (
         <>
+          <div className="space-y-4">
+            {/* Preview if image exists */}
+            {form.watch(`${path}.src`) && (
+              <div className="relative">
+                <img
+                  src={form.watch(`${path}.src`)}
+                  alt={form.watch(`${path}.alt`) || 'Preview'}
+                  className="max-h-48 rounded-lg border object-contain w-full"
+                />
+              </div>
+            )}
+
+            {/* Image URL Input with Uploader */}
+            <div>
+              <Label className="text-sm">Bild-URL</Label>
+              <ImageUploader
+                value={form.watch(`${path}.src`)}
+                onChange={(url) => form.setValue(`${path}.src`, url)}
+                bucket="booking_media"
+                folder="product-images"
+              />
+            </div>
+          </div>
+
           <div>
-            <Label className="text-sm">Image Source URL</Label>
-            <Input {...form.register(`${path}.src`)} placeholder="https://..." />
+            <Label className="text-sm">Alt-Text</Label>
+            <Input {...form.register(`${path}.alt`)} placeholder="Beschreibung für Barrierefreiheit" />
           </div>
           <div>
-            <Label className="text-sm">Alt Text</Label>
-            <Input {...form.register(`${path}.alt`)} placeholder="Description for accessibility" />
-          </div>
-          <div>
-            <Label className="text-sm">Caption (Optional)</Label>
+            <Label className="text-sm">Bildunterschrift (Optional)</Label>
             <Input {...form.register(`${path}.caption`)} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label className="text-sm">Width (Optional)</Label>
+              <Label className="text-sm">Breite (Optional)</Label>
               <Input
                 type="number"
                 {...form.register(`${path}.width`, { valueAsNumber: true })}
+                placeholder="px"
               />
             </div>
             <div>
-              <Label className="text-sm">Height (Optional)</Label>
+              <Label className="text-sm">Höhe (Optional)</Label>
               <Input
                 type="number"
                 {...form.register(`${path}.height`, { valueAsNumber: true })}
+                placeholder="px"
               />
             </div>
           </div>
@@ -166,6 +207,6 @@ export const ContentBlockEditor: React.FC<ContentBlockEditorProps> = ({
           </div>
         </>
       )}
-    </div>
+    </Card>
   );
 };

@@ -43,7 +43,7 @@ export const saveProductPage = async (
   mentorProductId: string,
   content: PageBuilderData,
   productName: string
-) => {
+): Promise<{ slug: string }> => {
   // Check if a product page already exists for this mentor product
   const { data: existingMentorProduct, error: existingMentorProductError } = await supabase
     .from('mentorbooking_products')
@@ -86,4 +86,6 @@ export const saveProductPage = async (
 
     if (updateError) throw updateError;
   }
+
+  return { slug };
 };

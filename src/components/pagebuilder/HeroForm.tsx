@@ -6,6 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { ImageUploader } from './ImageUploader';
+import { Plus, Trash2, GripVertical } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 interface HeroFormProps {
   form: ReturnType<typeof useFormContext<PageBuilderData>>;
@@ -27,86 +32,183 @@ export const HeroForm: React.FC<HeroFormProps> = ({ form }) => {
   };
 
   return (
-    <div className="space-y-4 p-4 border rounded-lg">
-      <h2 className="text-2xl font-bold">Hero Section</h2>
-      <div>
-        <Label>Title</Label>
-        <Input {...form.register('hero.title')} />
-      </div>
-      <div>
-        <Label>Image URL</Label>
-        <Input {...form.register('hero.image')} />
-      </div>
-      
-      <div>
-        <h3 className="text-lg font-semibold mb-2">Description Blocks</h3>
-        {descFields.map((field, index) => {
-          const block = form.watch(`hero.description.${index}`) as ContentBlock;
-          return (
-            <div key={field.id} className="space-y-2 p-3 border rounded mb-2">
-              <div className="flex justify-between items-center">
-                <Label>Block Type: {block.type}</Label>
-                <Button type="button" variant="destructive" size="sm" onClick={() => removeDesc(index)}>
-                  Remove
-                </Button>
-              </div>
-              
-              {block.type === 'text' && (
-                <>
-                  <div>
-                    <Label>Content</Label>
-                    <Textarea {...form.register(`hero.description.${index}.content`)} />
-                  </div>
-                  <div>
-                    <Label>Format</Label>
-                    <Select
-                      value={form.watch(`hero.description.${index}.format`) || 'paragraph'}
-                      onValueChange={(value) => form.setValue(`hero.description.${index}.format`, value as any)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="paragraph">Paragraph</SelectItem>
-                        <SelectItem value="heading1">Heading 1</SelectItem>
-                        <SelectItem value="heading2">Heading 2</SelectItem>
-                        <SelectItem value="heading3">Heading 3</SelectItem>
-                        <SelectItem value="bold">Bold</SelectItem>
-                        <SelectItem value="italic">Italic</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-        <Button
-          type="button"
-          onClick={() =>
-            appendDesc({
-              id: generateBlockId('hero-desc'),
-              type: 'text',
-              content: '',
-              format: 'paragraph',
-            } as ContentBlock)
-          }
-        >
-          Add Text Block
-        </Button>
-      </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center space-x-2">
+          <span>🦸</span>
+          <span>Hero Section</span>
+        </CardTitle>
+        <CardDescription>
+          Der erste Eindruck zählt - gestalten Sie den Hero-Bereich Ihrer Produktseite
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Title */}
+        <div className="space-y-2">
+          <Label htmlFor="hero-title" className="text-base font-semibold">
+            Titel
+          </Label>
+          <Input
+            id="hero-title"
+            {...form.register('hero.title')}
+            placeholder="z.B. Disability Awareness Session"
+            className="text-lg"
+          />
+        </div>
 
-      <div>
-        <h3 className="text-lg font-semibold">Stats</h3>
-        {statsFields.map((field, index) => (
-          <div key={field.id} className="flex items-center space-x-2 mb-2">
-            <Input {...form.register(`hero.stats.${index}.label`)} placeholder="Label" />
-            <Input {...form.register(`hero.stats.${index}.value`)} placeholder="Value" />
-            <Button type="button" onClick={() => removeStat(index)}>Remove</Button>
+        <Separator />
+
+        {/* Image */}
+        <div className="space-y-2">
+          <Label className="text-base font-semibold">Hero Bild</Label>
+          <ImageUploader
+            value={form.watch('hero.image')}
+            onChange={(url) => form.setValue('hero.image', url)}
+          />
+          {form.watch('hero.image') && (
+            <div className="mt-2 rounded-lg border overflow-hidden">
+              <img
+                src={form.watch('hero.image')}
+                alt="Hero preview"
+                className="w-full h-48 object-cover"
+              />
+            </div>
+          )}
+        </div>
+
+        <Separator />
+
+        {/* Description Blocks */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-base font-semibold">Beschreibung</Label>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                appendDesc({
+                  id: generateBlockId('hero-desc'),
+                  type: 'text',
+                  content: '',
+                  format: 'paragraph',
+                } as ContentBlock)
+              }
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Block hinzufügen
+            </Button>
           </div>
-        ))}
-        <Button type="button" onClick={() => appendStat({ label: '', value: '' })}>Add Stat</Button>
-      </div>
-    </div>
+
+          <div className="space-y-3">
+            {descFields.map((field, index) => {
+              const block = form.watch(`hero.description.${index}`) as ContentBlock;
+              return (
+                <Card key={field.id} className="border-l-4 border-l-primary">
+                  <CardContent className="pt-4 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center space-x-2">
+                        <GripVertical className="h-4 w-4 text-muted-foreground" />
+                        <Badge variant="secondary">{block.type}</Badge>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeDesc(index)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+
+                    {block.type === 'text' && (
+                      <>
+                        <Textarea
+                          {...form.register(`hero.description.${index}.content`)}
+                          placeholder="Beschreibungstext eingeben..."
+                          rows={4}
+                          className="resize-none"
+                        />
+                        <Select
+                          value={form.watch(`hero.description.${index}.format`) || 'paragraph'}
+                          onValueChange={(value) =>
+                            form.setValue(`hero.description.${index}.format`, value as any)
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="paragraph">Paragraph</SelectItem>
+                            <SelectItem value="heading1">Überschrift 1</SelectItem>
+                            <SelectItem value="heading2">Überschrift 2</SelectItem>
+                            <SelectItem value="heading3">Überschrift 3</SelectItem>
+                            <SelectItem value="bold">Fett</SelectItem>
+                            <SelectItem value="italic">Kursiv</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Stats */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-base font-semibold">Statistiken</Label>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => appendStat({ label: '', value: '' })}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Statistik hinzufügen
+            </Button>
+          </div>
+
+          <div className="grid gap-3">
+            {statsFields.map((field, index) => (
+              <Card key={field.id} className="border-dashed">
+                <CardContent className="pt-4">
+                  <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Wert</Label>
+                      <Input
+                        {...form.register(`hero.stats.${index}.value`)}
+                        placeholder="z.B. 4 STUNDEN"
+                        className="font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Label</Label>
+                      <Input
+                        {...form.register(`hero.stats.${index}.label`)}
+                        placeholder="z.B. INKL. PAUSEN"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeStat(index)}
+                      className="mt-5"
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 };

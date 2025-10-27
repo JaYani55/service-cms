@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -13,8 +13,12 @@ import { FeaturesForm } from './FeaturesForm';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 import { saveProductPage } from '@/services/productPageService';
 import { toast } from 'sonner';
+import { Save, Eye, Loader2, ExternalLink } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const ContentBlockSchema = z.union([
   z.object({
@@ -96,6 +100,9 @@ interface PageBuilderFormProps {
 }
 
 export const PageBuilderForm: React.FC<PageBuilderFormProps> = ({ initialData, productId, productName }) => {
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedSlug, setSavedSlug] = useState<string | null>(null);
+
   const form = useForm<PageBuilderData>({
     resolver: zodResolver(PageBuilderSchema),
     defaultValues: initialData || {
@@ -114,37 +121,125 @@ export const PageBuilderForm: React.FC<PageBuilderFormProps> = ({ initialData, p
         toast.error('Product ID or name is missing.');
         return;
     }
+    setIsSaving(true);
     try {
-        await saveProductPage(productId, data, productName);
+        const result = await saveProductPage(productId, data, productName);
+        setSavedSlug(result.slug);
         toast.success('Product page saved successfully!');
     } catch (error: any) {
         toast.error(`Failed to save product page: ${error.message}`);
+    } finally {
+        setIsSaving(false);
     }
   };
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-5xl mx-auto pb-20">
+        {/* Hero Section */}
         <HeroForm form={form} />
+
+        {/* CTA Section */}
         <CtaForm form={form} />
-        <FaqForm form={form} />
+
+        {/* Cards Section */}
         <CardsForm form={form} />
+
+        {/* Features Section */}
         <FeaturesForm form={form} />
 
-        <div className="space-y-4 p-4 border rounded-lg">
-            <h2 className="text-2xl font-bold">General</h2>
-            <div>
-                <Label>Subtitle</Label>
-                <Input {...form.register('subtitle')} />
+        {/* FAQ Section */}
+        <FaqForm form={form} />
+
+        {/* General Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <span>⚙️</span>
+              <span>Allgemeine Einstellungen</span>
+            </CardTitle>
+            <CardDescription>
+              Zusätzliche Informationen und Optionen
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="subtitle" className="text-base font-semibold">
+                Untertitel
+              </Label>
+              <Input
+                id="subtitle"
+                {...form.register('subtitle')}
+                placeholder="Zusätzliche Beschreibung oder Tagline"
+              />
             </div>
-            <div className="flex items-center space-x-2">
-                <Checkbox id="trainer-module" {...form.register('trainer-module')} />
-                <Label htmlFor="trainer-module">Trainer Module</Label>
+
+            <Separator />
+
+            <div className="flex items-center space-x-2 p-3 border rounded-lg bg-muted/30">
+              <Checkbox
+                id="trainer-module"
+                checked={form.watch('trainer-module') || false}
+                onCheckedChange={(checked) =>
+                  form.setValue('trainer-module', checked as boolean)
+                }
+              />
+              <Label htmlFor="trainer-module" className="cursor-pointer">
+                Trainer-Modul aktivieren
+              </Label>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Preview Link Alert */}
+        {savedSlug && (
+          <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
+            <Eye className="h-4 w-4 text-green-600" />
+            <AlertDescription className="flex items-center justify-between">
+              <span className="text-green-800 dark:text-green-200">
+                Produktseite erfolgreich gespeichert!
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="ml-4"
+              >
+                <a
+                  href={`https://inklusolutions.de/preview/${savedSlug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center"
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Vorschau ansehen
+                </a>
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Submit Button - Fixed at bottom */}
+        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-t z-50">
+          <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Produkt: <span className="font-semibold">{productName}</span>
+            </p>
+            <Button type="submit" size="lg" disabled={isSaving} className="min-w-[200px]">
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Wird gespeichert...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Speichern & Vorschau
+                </>
+              )}
+            </Button>
+          </div>
         </div>
-
-
-        <Button type="submit">Submit Preview</Button>
       </form>
     </Form>
   );
