@@ -1,5 +1,5 @@
 // Content Block Types
-export type ContentBlock = TextBlock | ImageBlock | QuoteBlock | ListBlock | VideoBlock;
+export type ContentBlock = TextBlock | HeadingBlock | ImageBlock | QuoteBlock | ListBlock | VideoBlock;
 
 export interface BaseBlock {
   id: string;
@@ -9,7 +9,12 @@ export interface BaseBlock {
 export interface TextBlock extends BaseBlock {
   type: 'text';
   content: string;
-  format?: 'paragraph' | 'heading1' | 'heading2' | 'heading3' | 'bold' | 'italic';
+}
+
+export interface HeadingBlock extends BaseBlock {
+  type: 'heading';
+  content: string;
+  level: 'heading1' | 'heading2' | 'heading3' | 'heading4' | 'heading5' | 'heading6';
 }
 
 export interface ImageBlock extends BaseBlock {
@@ -68,7 +73,8 @@ export interface Hero {
 export interface CardItem {
   icon: string;
   color: string;
-  items: string[];
+  items?: string[];
+  content?: Array<ContentBlock | { type: 'bullet-point'; id: string; text: string }>;
   title: string;
   description: string;
 }
@@ -77,6 +83,7 @@ export interface Feature {
   title: string;
   description: ContentBlock[];
   reverse?: boolean;
+  alignment?: 'left' | 'center' | 'right';
 }
 
 export interface PageBuilderData {

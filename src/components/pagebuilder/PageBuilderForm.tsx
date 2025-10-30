@@ -25,7 +25,12 @@ const ContentBlockSchema = z.union([
     id: z.string(),
     type: z.literal('text'),
     content: z.string(),
-    format: z.enum(['paragraph', 'heading1', 'heading2', 'heading3', 'bold', 'italic']).optional(),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal('heading'),
+    content: z.string(),
+    level: z.enum(['heading1', 'heading2', 'heading3', 'heading4', 'heading5', 'heading6']),
   }),
   z.object({
     id: z.string(),
@@ -80,7 +85,15 @@ const PageBuilderSchema = z.object({
   cards: z.array(z.object({
     icon: z.string(),
     color: z.string(),
-    items: z.array(z.string()),
+    items: z.array(z.string()).optional(),
+    content: z.array(z.union([
+      ContentBlockSchema,
+      z.object({
+        type: z.literal('bullet-point'),
+        id: z.string(),
+        text: z.string(),
+      }),
+    ])).optional(),
     title: z.string(),
     description: z.string(),
   })),
@@ -88,6 +101,7 @@ const PageBuilderSchema = z.object({
     title: z.string(),
     description: z.array(ContentBlockSchema),
     reverse: z.boolean().optional(),
+    alignment: z.enum(['left', 'center', 'right']).optional(),
   })),
   subtitle: z.string().optional(),
   'trainer-module': z.boolean().optional(),
@@ -139,17 +153,17 @@ export const PageBuilderForm: React.FC<PageBuilderFormProps> = ({ initialData, p
         {/* Hero Section */}
         <HeroForm form={form} />
 
-        {/* CTA Section */}
-        <CtaForm form={form} />
+        {/* Features Section */}
+        <FeaturesForm form={form} />
 
         {/* Cards Section */}
         <CardsForm form={form} />
 
-        {/* Features Section */}
-        <FeaturesForm form={form} />
-
         {/* FAQ Section */}
         <FaqForm form={form} />
+
+        {/* CTA Section */}
+        <CtaForm form={form} />
 
         {/* General Settings */}
         <Card>

@@ -11,6 +11,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Plus, Trash2, HelpCircle } from 'lucide-react';
+import { MarkdownEditor } from './MarkdownEditor';
 
 interface FaqFormProps {
   form: ReturnType<typeof useFormContext<PageBuilderData>>;
@@ -50,7 +51,6 @@ export const FaqForm: React.FC<FaqFormProps> = ({ form }) => {
                     id: generateBlockId('faq-answer'),
                     type: 'text',
                     content: '',
-                    format: 'paragraph',
                   } as ContentBlock,
                 ],
               })
@@ -146,32 +146,18 @@ const FaqAnswerBlocks: React.FC<{ faqIndex: number; form: any }> = ({ faqIndex, 
               </div>
 
               {block.type === 'text' && (
-                <>
-                  <Textarea
-                    {...form.register(`faq.${faqIndex}.answer.${blockIndex}.content`)}
-                    placeholder="Antworttext eingeben..."
-                    rows={3}
-                    className="resize-none"
-                  />
-                  <Select
-                    value={form.watch(`faq.${faqIndex}.answer.${blockIndex}.format`) || 'paragraph'}
-                    onValueChange={(value) =>
-                      form.setValue(`faq.${faqIndex}.answer.${blockIndex}.format`, value as any)
+                <div>
+                  <MarkdownEditor
+                    content={form.watch(`faq.${faqIndex}.answer.${blockIndex}.content`) || ''}
+                    onChange={(content) =>
+                      form.setValue(`faq.${faqIndex}.answer.${blockIndex}.content`, content)
                     }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="paragraph">Paragraph</SelectItem>
-                      <SelectItem value="heading1">Überschrift 1</SelectItem>
-                      <SelectItem value="heading2">Überschrift 2</SelectItem>
-                      <SelectItem value="heading3">Überschrift 3</SelectItem>
-                      <SelectItem value="bold">Fett</SelectItem>
-                      <SelectItem value="italic">Kursiv</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </>
+                    placeholder="Antworttext mit Markdown-Formatierung..."
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Verwenden Sie **fett**, *kursiv*, # für Überschriften
+                  </p>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -186,7 +172,6 @@ const FaqAnswerBlocks: React.FC<{ faqIndex: number; form: any }> = ({ faqIndex, 
             id: generateBlockId(`faq${faqIndex}-block`),
             type: 'text',
             content: '',
-            format: 'paragraph',
           } as ContentBlock)
         }
         className="w-full"

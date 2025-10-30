@@ -365,3 +365,64 @@
     transition-duration: 0.1s;
   }
 }
+
+/* TipTap Editor Styles */
+.ProseMirror {
+  @apply focus:outline-none;
+}
+
+.ProseMirror > * + * {
+  margin-top: 0.75em;
+}
+
+.ProseMirror h1 {
+  @apply text-2xl font-bold;
+}
+
+.ProseMirror h2 {
+  @apply text-xl font-bold;
+}
+
+.ProseMirror h3 {
+  @apply text-lg font-bold;
+}
+
+.ProseMirror ul {
+  @apply list-disc pl-5;
+}
+
+.ProseMirror ol {
+  @apply list-decimal pl-5;
+}
+
+.ProseMirror li {
+  @apply ml-4;
+}
+
+.ProseMirror strong {
+  @apply font-bold;
+}
+
+.ProseMirror em {
+  @apply italic;
+}
+
+.ProseMirror p {
+  @apply my-2;
+}
+
+.ProseMirror p:first-child {
+  @apply mt-0;
+}
+
+.ProseMirror p:last-child {
+  @apply mb-0;
+}
+
+.ProseMirror code {
+  @apply bg-muted rounded px-1 py-0.5 font-mono text-sm;
+}
+
+.ProseMirror blockquote {
+  @apply border-l-4 border-primary pl-4 italic my-4;
+}

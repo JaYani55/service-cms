@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ImageUploader } from './ImageUploader';
+import { MarkdownEditor } from './MarkdownEditor';
 import { Plus, Trash2, GripVertical } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
@@ -122,32 +123,18 @@ export const HeroForm: React.FC<HeroFormProps> = ({ form }) => {
                     </div>
 
                     {block.type === 'text' && (
-                      <>
-                        <Textarea
-                          {...form.register(`hero.description.${index}.content`)}
-                          placeholder="Beschreibungstext eingeben..."
-                          rows={4}
-                          className="resize-none"
-                        />
-                        <Select
-                          value={form.watch(`hero.description.${index}.format`) || 'paragraph'}
-                          onValueChange={(value) =>
-                            form.setValue(`hero.description.${index}.format`, value as any)
+                      <div>
+                        <MarkdownEditor
+                          content={form.watch(`hero.description.${index}.content`) || ''}
+                          onChange={(content) =>
+                            form.setValue(`hero.description.${index}.content`, content)
                           }
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="paragraph">Paragraph</SelectItem>
-                            <SelectItem value="heading1">Überschrift 1</SelectItem>
-                            <SelectItem value="heading2">Überschrift 2</SelectItem>
-                            <SelectItem value="heading3">Überschrift 3</SelectItem>
-                            <SelectItem value="bold">Fett</SelectItem>
-                            <SelectItem value="italic">Kursiv</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </>
+                          placeholder="Beschreibungstext mit Markdown-Formatierung..."
+                        />
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Verwenden Sie **fett**, *kursiv*, # für Überschriften
+                        </p>
+                      </div>
                     )}
                   </CardContent>
                 </Card>

@@ -24,7 +24,15 @@ export const AddContentBlock: React.FC<AddContentBlockProps> = ({ onAdd, prefix 
       id: generateBlockId(),
       type: 'text',
       content: '',
-      format: 'paragraph',
+    });
+  };
+
+  const addHeadingBlock = () => {
+    onAdd({
+      id: generateBlockId(),
+      type: 'heading',
+      content: '',
+      level: 'heading2',
     });
   };
 
@@ -34,6 +42,8 @@ export const AddContentBlock: React.FC<AddContentBlockProps> = ({ onAdd, prefix 
       type: 'image',
       src: '',
       alt: '',
+      width: 800,
+      height: 600,
     });
   };
 
@@ -66,17 +76,30 @@ export const AddContentBlock: React.FC<AddContentBlockProps> = ({ onAdd, prefix 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" size="sm" variant="outline">
+        <Button type="button" size="sm" variant="outline" className="w-full">
           <Plus className="h-4 w-4 mr-2" />
-          Add Content Block
+          Inhaltsblock hinzufügen
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
-        <DropdownMenuItem onClick={addTextBlock}>Text Block</DropdownMenuItem>
-        <DropdownMenuItem onClick={addImageBlock}>Image Block</DropdownMenuItem>
-        <DropdownMenuItem onClick={addQuoteBlock}>Quote Block</DropdownMenuItem>
-        <DropdownMenuItem onClick={addListBlock}>List Block</DropdownMenuItem>
-        <DropdownMenuItem onClick={addVideoBlock}>Video Block</DropdownMenuItem>
+        <DropdownMenuItem onClick={addTextBlock}>
+          📝 Text-Block
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={addHeadingBlock}>
+          📋 Überschrift
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={addImageBlock}>
+          🖼️ Bild
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={addQuoteBlock}>
+          💬 Zitat
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={addListBlock}>
+          📋 Liste
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={addVideoBlock}>
+          🎥 Video
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

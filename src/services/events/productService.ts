@@ -144,10 +144,10 @@ export const deleteProduct = async (id: number): Promise<boolean> => {
   try {
     console.log(`Deleting Product with ID: ${id}`);
     
-    // First check if the Product exists
+    // First check if the Product exists and get its product_page_id
     const { data: existingProduct, error: checkError } = await supabase
       .from('mentorbooking_products')
-      .select('id')
+      .select('id, product_page_id')
       .eq('id', id)
       .single();
       
@@ -160,7 +160,24 @@ export const deleteProduct = async (id: number): Promise<boolean> => {
       throw new Error(`Product with ID ${id} not found`);
     }
     
-    // Delete the Product
+    // If there's a linked product page, delete it first
+    if (existingProduct.product_page_id) {
+      console.log(`Deleting linked product page with ID: ${existingProduct.product_page_id}`);
+      const { error: pageDeleteError } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', existingProduct.product_page_id);
+      
+      if (pageDeleteError) {
+        console.error('Error deleting product page:', pageDeleteError);
+        // Continue with product deletion even if page deletion fails
+        console.warn('Continuing with product deletion despite page deletion error');
+      } else {
+        console.log('Product page deleted successfully');
+      }
+    }
+    
+    // Delete the Product from mentorbooking_products
     const { error } = await supabase
       .from('mentorbooking_products')
       .delete()
@@ -170,6 +187,8 @@ export const deleteProduct = async (id: number): Promise<boolean> => {
       console.error('Error deleting Product:', error);
       throw new Error(`Failed to delete Product: ${error.message}`);
     }
+    
+    console.log('Product deleted successfully from mentorbooking_products');
     
     // Double-check deletion was successful
     const { data: checkAfter, error: afterError } = await supabase

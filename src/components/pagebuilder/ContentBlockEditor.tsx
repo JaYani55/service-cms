@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ImageUploader } from './ImageUploader';
+import { MarkdownEditor } from './MarkdownEditor';
 import { Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 
@@ -28,6 +29,7 @@ export const ContentBlockEditor: React.FC<ContentBlockEditorProps> = ({
         <Label className="text-base font-semibold flex items-center space-x-2">
           <span className="text-muted-foreground">
             {block.type === 'text' && '📝'}
+            {block.type === 'heading' && '📋'}
             {block.type === 'image' && '🖼️'}
             {block.type === 'quote' && '💬'}
             {block.type === 'list' && '📋'}
@@ -35,6 +37,7 @@ export const ContentBlockEditor: React.FC<ContentBlockEditorProps> = ({
           </span>
           <span>
             {block.type === 'text' && 'Text Block'}
+            {block.type === 'heading' && 'Heading Block'}
             {block.type === 'image' && 'Image Block'}
             {block.type === 'quote' && 'Quote Block'}
             {block.type === 'list' && 'List Block'}
@@ -48,27 +51,44 @@ export const ContentBlockEditor: React.FC<ContentBlockEditorProps> = ({
       </div>
 
       {block.type === 'text' && (
+        <div>
+          <Label className="text-sm mb-2 block">Content (Markdown-Formatierung)</Label>
+          <MarkdownEditor
+            content={form.watch(`${path}.content`) || ''}
+            onChange={(content) => form.setValue(`${path}.content`, content)}
+            placeholder="Text mit Markdown-Formatierung eingeben..."
+          />
+          <p className="text-xs text-muted-foreground mt-2">
+            Verwenden Sie **fett**, *kursiv*, # Überschrift 1, ## Überschrift 2, ### Überschrift 3
+          </p>
+        </div>
+      )}
+
+      {block.type === 'heading' && (
         <>
           <div>
-            <Label className="text-sm">Content</Label>
-            <Textarea {...form.register(`${path}.content`)} rows={4} />
+            <Label className="text-sm">Überschrift</Label>
+            <Input
+              {...form.register(`${path}.content`)}
+              placeholder="Überschrift eingeben..."
+            />
           </div>
           <div>
-            <Label className="text-sm">Format</Label>
+            <Label className="text-sm">Überschrift-Ebene</Label>
             <Select
-              value={form.watch(`${path}.format`) || 'paragraph'}
-              onValueChange={(value) => form.setValue(`${path}.format`, value)}
+              value={form.watch(`${path}.level`) || 'heading2'}
+              onValueChange={(value) => form.setValue(`${path}.level`, value)}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="paragraph">Paragraph</SelectItem>
-                <SelectItem value="heading1">Heading 1</SelectItem>
-                <SelectItem value="heading2">Heading 2</SelectItem>
-                <SelectItem value="heading3">Heading 3</SelectItem>
-                <SelectItem value="bold">Bold</SelectItem>
-                <SelectItem value="italic">Italic</SelectItem>
+                <SelectItem value="heading1">Überschrift 1 (H1)</SelectItem>
+                <SelectItem value="heading2">Überschrift 2 (H2)</SelectItem>
+                <SelectItem value="heading3">Überschrift 3 (H3)</SelectItem>
+                <SelectItem value="heading4">Überschrift 4 (H4)</SelectItem>
+                <SelectItem value="heading5">Überschrift 5 (H5)</SelectItem>
+                <SelectItem value="heading6">Überschrift 6 (H6)</SelectItem>
               </SelectContent>
             </Select>
           </div>
