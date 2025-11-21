@@ -1,5 +1,4 @@
-# Mentor Booking Application
-
+# Booking Content Management System (Working Title)
 ## Project Setup
 
 ```sh
