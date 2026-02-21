@@ -1,7 +1,0 @@
-{
-  "name": "inklu-connect-booking",
-  "compatibility_date": "2025-10-16",
-  "assets": {
-    "directory": "./dist"
-  }
-}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
@@ -30,8 +30,6 @@ import Layout from "./components/layout/Layout";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import { FloatingBugButton } from "./components/bugreporting/FloatingBugButton";
 import { FloatingFeedbackButton } from "./components/feedback/FloatingFeedbackButton";
-import { SeaTableDebugger } from "./components/profile/SeaTableDebugger";
-import { SeaTableDataTest } from "./components/test/SeaTableDataTest";
 
 // Import Verwaltung components
 import Verwaltung from "./pages/Verwaltung";
@@ -233,8 +231,6 @@ const AppContent = () => {
               </ProtectedRoute>
             } 
           />
-          <Route path="/seatable-debug" element={<SeaTableDebugger />} />
-          <Route path="/seatable-test" element={<SeaTableDataTest />} />
           <Route path="/test-loader" element={<ProtectedRoute><TestLoader /></ProtectedRoute>} />
         </Route>
         <Route path="*" element={<NotFound />} />

@@ -1,4 +1,5 @@
 import React from "react";
+import { DraggableProvidedDragHandleProps, DraggableProvidedDraggableProps } from "@hello-pangea/dnd";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { User } from "lucide-react";
@@ -16,9 +17,9 @@ interface MentorCardProps {
   language: "en" | "de";
   isDragging?: boolean;
   getInitials: (name: string) => string;
-  dragHandleProps?: any;
-  draggableProps?: any;
-  innerRef?: any;
+  dragHandleProps?: DraggableProvidedDragHandleProps | null;
+  draggableProps?: DraggableProvidedDraggableProps;
+  innerRef?: (element: HTMLElement | null) => void;
 }
 
 export const MentorCard: React.FC<MentorCardProps> = ({

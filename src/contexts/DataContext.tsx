@@ -10,7 +10,6 @@ import { fetchProducts, Product } from '@/services/events/productService';
 // NEU: Importiere ensureProductGradient
 import { ensureProductGradient } from '@/services/events/productService';
 import type { UserProfileRecord } from '@/types/auth';
-import type { SeaTableRow, SeaTableRowUpdate } from '@/types/seaTableTypes';
 
 // Define types for our context
 interface DataContextType {
@@ -24,8 +23,6 @@ interface DataContextType {
   refetchAllData: () => Promise<void>;
   getEventById: (id: string) => Event | undefined;
   getUserProfile: (userId: string) => Promise<UserProfileRecord | null>;
-  getMentorData: (userId: string) => Promise<SeaTableRow | null>;
-  updateMentorData: (userId: string, data: SeaTableRowUpdate) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -241,49 +238,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // Get mentor data from cache or API with SeaTable fallback
-  const getMentorData = useCallback(async (userId: string): Promise<SeaTableRow | null> => {
-    const cachedData = queryClient.getQueryData<SeaTableRow>([QUERY_KEYS.SEATABLE_MENTORS, userId]);
-    if (cachedData) {
-      return cachedData;
-    }
-
-    try {
-      const { seatableClient } = await import('@/lib/seatableClient');
-      const rows = await seatableClient.getFilteredRows('Mentors', 'Mentor_ID', userId);
-      const mentorData = rows[0] ?? null;
-
-      if (mentorData) {
-        queryClient.setQueryData([QUERY_KEYS.SEATABLE_MENTORS, userId], mentorData);
-      }
-
-      return mentorData;
-    } catch (error) {
-      console.error('[DataContext] Error fetching mentor data:', error);
-      return null;
-    }
-  }, [queryClient]);
-
-  // Update mentor data
-  const updateMentorData = useCallback(async (userId: string, data: SeaTableRowUpdate) => {
-    try {
-      const { seatableClient } = await import('@/lib/seatableClient');
-      const rows = await seatableClient.getFilteredRows('Mentors', 'Mentor_ID', userId);
-
-      if (rows.length === 0) {
-        throw new Error(`User ${userId} not found in SeaTable`);
-      }
-
-      const rowId = rows[0]._id;
-      await seatableClient.updateRow('Mentors', rowId, data);
-
-      await refetchAllData();
-    } catch (error) {
-      console.error('[DataContext] Error updating mentor data:', error);
-      throw error instanceof Error ? error : new Error('Unknown error updating mentor data');
-    }
-  }, [refetchAllData]);
-
   // Make sure the DataProvider returns JSX
   return (
     <DataContext.Provider value={{
@@ -296,9 +250,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       refetchEvents,
       refetchAllData,
       getEventById,
-      getUserProfile,
-      getMentorData,
-      updateMentorData
+      getUserProfile
     }}>
       {children}
     </DataContext.Provider>

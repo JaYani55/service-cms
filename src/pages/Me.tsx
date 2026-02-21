@@ -4,17 +4,9 @@ import { Card } from "@/components/ui/card";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfileData } from "@/hooks/useProfileData";
-import { useSeatableMentors } from "@/hooks/useSeatableMentors";
-import { User, Settings, ChevronRight } from "lucide-react";
+import { User, Settings, Construction, ChevronRight } from "lucide-react";
 import { ProfileSkeleton } from "@/components/profile/ProfileSkeleton";
-import { SeaTableProfileData } from "@/components/profile/SeaTableProfileData";
-import { ColumnMetadata, SeaTableRow } from "@/types/seaTableTypes";
-
-const getStringField = (row: SeaTableRow | null | undefined, field: string): string | null => {
-  if (!row) return null;
-  const value = row[field];
-  return typeof value === 'string' && value.trim().length > 0 ? value : null;
-};
+import { SeaTableDataUnavailable } from "@/components/profile/SeaTableDataUnavailable";
 
 const Me = () => {
   const { language } = useTheme();
@@ -24,27 +16,7 @@ const Me = () => {
   const {
     isLoading,
     user,
-    seatableMentorData,
   } = useProfileData(language);
-
-  // Get metadata for SeaTable display
-  const seatableMentorsOptions = useMemo(() => ({}), []);
-  const { getTableMetadata } = useSeatableMentors(seatableMentorsOptions);
-  const [columnMetadata, setColumnMetadata] = React.useState<ColumnMetadata | undefined>();
-
-  React.useEffect(() => {
-    if (getTableMetadata) {
-      const fetchMetadata = async () => {
-        try {
-          const metadata = await getTableMetadata('Neue_MentorInnen');
-          setColumnMetadata(metadata);
-        } catch (error) {
-          console.error('Error fetching column metadata:', error);
-        }
-      };
-      fetchMetadata();
-    }
-  }, [getTableMetadata]);
 
   const displayUsername = useMemo(() => {
     const username = typeof user?.Username === 'string' && user.Username.trim().length > 0
@@ -55,20 +27,8 @@ const Me = () => {
       return username;
     }
 
-    const firstName = getStringField(seatableMentorData, 'Vorname');
-    const lastName = getStringField(seatableMentorData, 'Nachname');
-
-    if (firstName && lastName) {
-      return `${firstName} ${lastName}`;
-    }
-
-    const displayName = getStringField(seatableMentorData, 'Anzeigename');
-    if (displayName) {
-      return displayName;
-    }
-
     return language === 'en' ? 'Unknown User' : 'Unbekannter Benutzer';
-  }, [language, seatableMentorData, user?.Username]);
+  }, [language, user?.Username]);
 
   if (!currentUser) {
     return null;
@@ -97,10 +57,9 @@ const Me = () => {
           <ProfileSkeleton />
         ) : (
           <div className="space-y-6">
-            {/* Profile Header - Remove ProfilePhoto */}
+            {/* Profile Header */}
             <Card className="p-6">
               <div className="flex items-center space-x-4">
-                {/* Remove the ProfilePhoto component entirely */}
                 <div>
                   <h2 className="text-2xl font-bold">
                     {displayUsername}
@@ -109,38 +68,17 @@ const Me = () => {
                     {currentUser.email}
                   </p>
                   <p className="text-sm text-muted-foreground capitalize">
-                    {currentUser.role.replace('_', ' ')}
+                    {currentUser.role?.replace('_', ' ')}
                   </p>
                 </div>
               </div>
             </Card>
 
-            {/* SeaTable Data or Not Found Message */}
-            {seatableMentorData ? (
-              <SeaTableProfileData
-                data={seatableMentorData}
-                isLoading={false}
-                language={language}
-                userId={currentUser.id}
-                columnMetadata={columnMetadata}
-              />
-            ) : (
-              <Card className="p-6 text-center">
-                <div className="space-y-4">
-                  <User className="h-12 w-12 text-muted-foreground mx-auto" />
-                  <div>
-                    <h3 className="text-lg font-semibold">
-                      {language === "en" ? "User isn't in SeaTable yet" : "Benutzer ist noch nicht in SeaTable"}
-                    </h3>
-                    <p className="text-muted-foreground">
-                      {language === "en" 
-                        ? "Your mentor profile data hasn't been added to SeaTable yet. Please contact an administrator if you believe this is an error."
-                        : "Ihre Mentor-Profildaten wurden noch nicht zu SeaTable hinzugefügt. Bitte wenden Sie sich an einen Administrator, wenn Sie glauben, dass dies ein Fehler ist."}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            )}
+            {/* Profile Data Under Construction Notice */}
+            <SeaTableDataUnavailable 
+              language={language} 
+              userId={user?.id} 
+            />
           </div>
         )}
       </div>

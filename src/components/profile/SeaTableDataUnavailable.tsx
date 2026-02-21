@@ -1,8 +1,6 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle } from 'lucide-react';
-import { Button } from "@/components/ui/button";
-import { usePermissions } from '@/hooks/usePermissions';
+import { Construction } from 'lucide-react';
 
 interface SeaTableDataUnavailableProps {
   language: 'en' | 'de';
@@ -11,55 +9,24 @@ interface SeaTableDataUnavailableProps {
 }
 
 export const SeaTableDataUnavailable: React.FC<SeaTableDataUnavailableProps> = ({
-  language,
-  userId,
-  onRetry
+  language
 }) => {
-  const permissions = usePermissions();
-  
   return (
-    <Card className="p-6 shadow-md border border-amber-200 bg-amber-50">
-      <CardHeader className="px-0 pt-0">
-        <CardTitle className="text-amber-700 flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5" />
-          {language === 'en' ? 'SeaTable Data Unavailable' : 'SeaTable-Daten nicht verfügbar'}
+    <Card className="p-6 shadow-sm border-dashed">
+      <CardHeader className="px-0 pt-0 text-center">
+        <div className="bg-muted rounded-full p-3 mx-auto mb-4 w-fit">
+          <Construction className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <CardTitle className="flex justify-center items-center gap-2">
+          {language === 'en' ? 'Profile Management Under Construction' : 'Profilverwaltung in Bearbeitung'}
         </CardTitle>
       </CardHeader>
-      <CardContent className="px-0">
-        <p className="text-amber-700 mb-4">
+      <CardContent className="px-0 text-center">
+        <p className="text-muted-foreground">
           {language === 'en' 
-            ? `The additional mentor data for user ID ${userId || 'unknown'} could not be loaded from SeaTable.` 
-            : `Die zusätzlichen Mentor-Daten für Benutzer-ID ${userId || 'unbekannt'} konnten nicht aus SeaTable geladen werden.`}
+            ? "The profile management system is currently being migrated to our new internal infrastructure. Access to detailed mentor information will be available soon." 
+            : "Das Profilverwaltungssystem wird derzeit auf unsere neue interne Infrastruktur migriert. Der Zugriff auf detaillierte Mentoreninformationen wird in Kürze verfügbar sein."}
         </p>
-        {permissions.canViewAdminData && (
-          <>
-            <p className="text-sm text-amber-600 mb-4">
-              {language === 'en'
-                ? 'Please check the SeaTable API integration or verify that this user has a corresponding record in the SeaTable database.'
-                : 'Bitte überprüfen Sie die SeaTable-API-Integration oder stellen Sie sicher, dass dieser Benutzer einen entsprechenden Eintrag in der SeaTable-Datenbank hat.'}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.open('/seatable-debug', '_blank')}
-                className="text-amber-700 border-amber-300"
-              >
-                {language === 'en' ? 'Open API Debugger' : 'API-Debugger öffnen'}
-              </Button>
-              {onRetry && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onRetry}
-                  className="text-amber-700 border-amber-300"
-                >
-                  {language === 'en' ? 'Retry' : 'Erneut versuchen'}
-                </Button>
-              )}
-            </div>
-          </>
-        )}
       </CardContent>
     </Card>
   );

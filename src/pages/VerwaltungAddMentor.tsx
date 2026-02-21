@@ -7,7 +7,8 @@ import { UserPlus } from 'lucide-react';
 // Import consistent admin components
 import { AdminPageLayout } from '@/components/admin/ui';
 import { BackButton } from '@/components/admin/ui';
-import MentorSeaTableForm from "@/components/mentors/seatablementorform";
+import { Card, CardContent } from "@/components/ui/card";
+import { SeaTableDataUnavailable } from '@/components/profile/SeaTableDataUnavailable';
 
 const VerwaltungAddMentor = () => {
   const { language } = useTheme();
@@ -38,7 +39,7 @@ const VerwaltungAddMentor = () => {
         />
       }
     >
-      <MentorSeaTableForm />
+      <SeaTableDataUnavailable />
     </AdminPageLayout>
   );
 };

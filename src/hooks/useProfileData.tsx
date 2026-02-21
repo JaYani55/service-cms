@@ -2,9 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSeatableMentors } from '@/hooks/useSeatableMentors';
 import { supabase } from '@/lib/supabase';
-import { SeaTableRow } from '@/types/seaTableTypes';
 
 type ProfileRow = {
   user_id: string;
@@ -60,17 +58,11 @@ export const useProfileData = (language: 'en' | 'de') => {
   const [hasAccess, setHasAccess] = useState(false);
   const [accessChecked, setAccessChecked] = useState(false);
   const [user, setUser] = useState<ProfileUser | null>(null);
-  const [seatableMentorData, setSeatableMentorData] = useState<SeaTableRow | null>(null);
   const [isRegistrationInProcess, setIsRegistrationInProcess] = useState(false);
 
   // Determine the actual user ID to fetch
   const targetUserId = userId || currentUser?.id;
   const isOwnProfile = !userId || userId === currentUser?.id;
-
-  // SeaTable hook - ALWAYS use "extern" view for profiles
-  const { getMentorById, tryAlternateTables } = useSeatableMentors({
-    viewName: 'extern'
-  });
 
   // Check access permissions
   const checkAccess = useCallback(async () => {
@@ -187,35 +179,6 @@ export const useProfileData = (language: 'en' | 'de') => {
     }
   }, [targetUserId, isOwnProfile, currentUser?.roles]);
 
-  // Fetch SeaTable data
-  const fetchSeaTableData = useCallback(async () => {
-    if (!targetUserId || !hasAccess) return;
-
-    try {
-      console.log('[useProfileData] Fetching SeaTable data for:', targetUserId);
-      
-      let mentorData = await getMentorById(targetUserId);
-      
-      // If not found, try alternate tables
-      if (!mentorData) {
-        console.log('[useProfileData] No data found, trying alternate tables');
-        mentorData = await tryAlternateTables(targetUserId);
-      }
-
-      if (mentorData) {
-        console.log('[useProfileData] SeaTable data found:', Object.keys(mentorData));
-        setSeatableMentorData(mentorData);
-      } else {
-        console.log('[useProfileData] No SeaTable data found');
-        setSeatableMentorData(null);
-      }
-
-    } catch (error) {
-      console.error('[useProfileData] Error fetching SeaTable data:', error);
-      setSeatableMentorData(null);
-    }
-  }, [targetUserId, hasAccess, getMentorById, tryAlternateTables]);
-
   // Update username function
   const updateUsername = useCallback(async (newUsername: string): Promise<boolean> => {
     if (!targetUserId || (!isOwnProfile && !canEditUsername)) return false;
@@ -247,18 +210,11 @@ export const useProfileData = (language: 'en' | 'de') => {
     }
   }, [targetUserId, checkAccess]);
 
-  useEffect(() => {
-    if (hasAccess && accessChecked && !isRegistrationInProcess) {
-      fetchSeaTableData();
-    }
-  }, [hasAccess, accessChecked, isRegistrationInProcess, fetchSeaTableData]);
-
   return {
     isLoading,
     hasAccess,
     accessChecked,
     user,
-    seatableMentorData,
     isRegistrationInProcess,
     updateUsername,
     isOwnProfile,

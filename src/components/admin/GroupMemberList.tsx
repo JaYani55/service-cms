@@ -1,5 +1,5 @@
 import React from "react";
-import { Droppable, Draggable } from "react-beautiful-dnd";
+import { Droppable, Draggable } from "@hello-pangea/dnd";
 import { Loader2, X } from "lucide-react";
 import { EmptyState } from "./EmptyState";
 import { usePermissions } from '@/hooks/usePermissions';
