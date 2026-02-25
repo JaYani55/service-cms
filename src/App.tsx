@@ -24,6 +24,9 @@ import NotFound from "./pages/NotFound";
 import TestLoader from "./pages/TestLoader";
 import Info from "./pages/Info";
 import PageBuilder from "./pages/PageBuilder";
+import Pages from "./pages/Pages";
+import PagesSchemaDetail from "./pages/PagesSchemaDetail";
+import SchemaEditor from "./pages/SchemaEditor";
 
 // Import components
 import Layout from "./components/layout/Layout";
@@ -200,6 +203,14 @@ const AppContent = () => {
               </ProtectedRoute>
             } 
           />
+
+          {/* Pages Routes */}
+          <Route path="/pages" element={<ProtectedRoute requiredRole="staff"><Pages /></ProtectedRoute>} />
+          <Route path="/pages/schema/new" element={<ProtectedRoute requiredRole="staff"><SchemaEditor /></ProtectedRoute>} />
+          <Route path="/pages/schema/:schemaSlug" element={<ProtectedRoute requiredRole="staff"><PagesSchemaDetail /></ProtectedRoute>} />
+          <Route path="/pages/schema/:schemaSlug/settings" element={<ProtectedRoute requiredRole="staff"><SchemaEditor /></ProtectedRoute>} />
+          <Route path="/pages/schema/:schemaSlug/new" element={<ProtectedRoute requiredRole="staff"><PageBuilder /></ProtectedRoute>} />
+          <Route path="/pages/schema/:schemaSlug/edit/:pageId" element={<ProtectedRoute requiredRole="staff"><PageBuilder /></ProtectedRoute>} />
 
           {/* Verwaltung Routes */}
           <Route path="/verwaltung" element={<ProtectedRoute requiredRole="staff"><Verwaltung /></ProtectedRoute>} />

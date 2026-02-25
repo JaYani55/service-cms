@@ -1,0 +1,12 @@
+{
+  "name": "service-cms-api",
+  "main": "api/index.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // Environment variables — set via `wrangler secret put` or dashboard
+  // SUPABASE_URL: Your Supabase project URL
+  // SUPABASE_SERVICE_ROLE_KEY: Server-side service role key (secret)
+  "vars": {
+    "ENVIRONMENT": "production"
+  }
+}

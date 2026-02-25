@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Form } from '@/components/ui/form';
-import { PageBuilderData } from '@/types/pagebuilder';
+import { PageBuilderData, PageSchema } from '@/types/pagebuilder';
 import { CtaForm } from './CtaForm';
 import { FaqForm } from './FaqForm';
 import { HeroForm } from './HeroForm';
@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { saveProductPage } from '@/services/productPageService';
+import { savePage, triggerRevalidation } from '@/services/pageService';
 import { toast } from 'sonner';
 import { Save, Eye, Loader2, ExternalLink } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -111,11 +112,16 @@ interface PageBuilderFormProps {
   initialData?: PageBuilderData | null;
   productId?: string;
   productName?: string;
+  schema?: PageSchema;
+  schemaSlug?: string;
 }
 
-export const PageBuilderForm: React.FC<PageBuilderFormProps> = ({ initialData, productId, productName }) => {
+export const PageBuilderForm: React.FC<PageBuilderFormProps> = ({ initialData, productId, productName, schema, schemaSlug }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [savedSlug, setSavedSlug] = useState<string | null>(null);
+  const [pageName, setPageName] = useState(productName || '');
+
+  const isSchemaMode = !!schema;
 
   const form = useForm<PageBuilderData>({
     resolver: zodResolver(PageBuilderSchema),
@@ -131,26 +137,71 @@ export const PageBuilderForm: React.FC<PageBuilderFormProps> = ({ initialData, p
   });
 
   const onSubmit = async (data: PageBuilderData) => {
-    if (!productId || !productName) {
-        toast.error('Product ID or name is missing.');
-        return;
-    }
     setIsSaving(true);
     try {
+      if (isSchemaMode && schema) {
+        // Schema-driven mode: save to pages table
+        const name = pageName || productName || 'Untitled';
+        const result = await savePage(productId || undefined, {
+          name,
+          content: data,
+          schema_id: schema.id,
+          status: 'draft',
+        });
+        setSavedSlug(result.slug);
+        toast.success('Page saved successfully!');
+
+        // Trigger ISR revalidation if schema is registered
+        if (schema.registration_status === 'registered' && schemaSlug && result.slug) {
+          try {
+            await triggerRevalidation(schemaSlug, result.slug);
+            toast.success('Revalidation triggered');
+          } catch {
+            // ISR failure is not critical
+            toast.warning('Page saved but revalidation failed');
+          }
+        }
+      } else {
+        // Legacy mode
+        if (!productId || !productName) {
+          toast.error('Product ID or name is missing.');
+          return;
+        }
         const result = await saveProductPage(productId, data, productName);
         setSavedSlug(result.slug);
         toast.success('Product page saved successfully!');
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unbekannter Fehler beim Speichern.';
-    toast.error(`Failed to save product page: ${message}`);
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unbekannter Fehler beim Speichern.';
+      toast.error(`Failed to save: ${message}`);
     } finally {
-        setIsSaving(false);
+      setIsSaving(false);
     }
   };
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-5xl mx-auto pb-20">
+        {/* Page Name (Schema mode only) */}
+        {isSchemaMode && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <span>📝</span>
+                <span>Seitenname</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Input
+                value={pageName}
+                onChange={(e) => setPageName(e.target.value)}
+                placeholder="Name der Seite"
+                className="text-lg"
+              />
+            </CardContent>
+          </Card>
+        )}
+
         {/* Hero Section */}
         <HeroForm form={form} />
 
@@ -238,7 +289,10 @@ export const PageBuilderForm: React.FC<PageBuilderFormProps> = ({ initialData, p
         <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-t z-50">
           <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              Produkt: <span className="font-semibold">{productName}</span>
+              {isSchemaMode
+                ? <>Schema: <span className="font-semibold">{schema?.name}</span> — Seite: <span className="font-semibold">{pageName || 'Unbenannt'}</span></>
+                : <>Produkt: <span className="font-semibold">{productName}</span></>
+              }
             </p>
             <Button type="submit" size="lg" disabled={isSaving} className="min-w-[200px]">
               {isSaving ? (

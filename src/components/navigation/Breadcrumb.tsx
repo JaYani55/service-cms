@@ -52,6 +52,11 @@ const Breadcrumb: React.FC = () => {
       label: { en: 'Assign Traits', de: 'Eigenschaften zuweisen' },
       parent: '/verwaltung'
     },
+    '/pages': { label: { en: 'Pages', de: 'Seiten' } },
+    '/pages/schema/new': {
+      label: { en: 'New Schema', de: 'Neues Schema' },
+      parent: '/pages'
+    },
   };
 
   const generateBreadcrumbs = (): BreadcrumbItem[] => {
@@ -112,6 +117,35 @@ const Breadcrumb: React.FC = () => {
             path: currentPath,
             isActive: i === pathnames.length - 1
           });
+        } else if (currentPath.startsWith('/pages/schema/')) {
+          // Handle dynamic pages/schema routes
+          const segments = currentPath.split('/');
+          if (segments.length === 4) {
+            // /pages/schema/:slug
+            breadcrumbs.push({
+              label: decodeURIComponent(pathnames[i]),
+              path: currentPath,
+              isActive: i === pathnames.length - 1
+            });
+          } else if (segments.length === 5) {
+            const lastSegment = segments[4];
+            if (lastSegment === 'settings') {
+              breadcrumbs.push({
+                label: language === 'en' ? 'Schema Settings' : 'Schema-Einstellungen',
+                isActive: true
+              });
+            } else if (lastSegment === 'new') {
+              breadcrumbs.push({
+                label: language === 'en' ? 'New Page' : 'Neue Seite',
+                isActive: true
+              });
+            }
+          } else if (segments.length === 6 && segments[4] === 'edit') {
+            breadcrumbs.push({
+              label: language === 'en' ? 'Edit Page' : 'Seite bearbeiten',
+              isActive: true
+            });
+          }
         }
       }
     }

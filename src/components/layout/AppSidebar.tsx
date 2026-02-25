@@ -1,4 +1,4 @@
-import { Calendar, Settings, Users, User, List, LogOut, HelpCircle, Moon, Sun, ChevronUp, Globe } from "lucide-react"
+import { Calendar, Settings, Users, User, List, LogOut, HelpCircle, Moon, Sun, ChevronUp, Globe, FileText } from "lucide-react"
 import { useLocation, Link } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { useTheme } from "@/contexts/ThemeContext"
@@ -55,11 +55,18 @@ export function AppSidebar() {
   ]
 
   if (canAccessVerwaltung) {
-    items.push({
-      title: language === "en" ? "Administration" : "Verwaltung",
-      url: "/verwaltung",
-      icon: Settings,
-    })
+    items.push(
+      {
+        title: language === "en" ? "Pages" : "Seiten",
+        url: "/pages",
+        icon: FileText,
+      },
+      {
+        title: language === "en" ? "Administration" : "Verwaltung",
+        url: "/verwaltung",
+        icon: Settings,
+      }
+    )
   }
 
   const ukFlagUrl = "https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/gb.svg"

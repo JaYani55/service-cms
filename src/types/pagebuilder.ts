@@ -95,3 +95,60 @@ export interface PageBuilderData {
   subtitle: string;
   'trainer-module': boolean;
 }
+
+// --- Schema-Driven PageBuilder Types ---
+
+export type SchemaRegistrationStatus = 'pending' | 'waiting' | 'registered' | 'archived';
+
+export interface PageSchema {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  schema: Record<string, unknown>;
+  llm_instructions: string | null;
+  registration_code: string | null;
+  registration_status: SchemaRegistrationStatus;
+  frontend_url: string | null;
+  revalidation_endpoint: string | null;
+  revalidation_secret: string | null;
+  slug_structure: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PageRecord {
+  id: string;
+  slug: string;
+  name: string;
+  status: 'draft' | 'published' | 'archived';
+  is_draft: boolean;
+  content: Record<string, unknown>;
+  schema_id: string | null;
+  domain_url: string | null;
+  updated_at: string;
+  published_at: string | null;
+}
+
+export interface SchemaFieldDefinition {
+  name: string;
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'ContentBlock[]';
+  description?: string;
+  required?: boolean;
+  properties?: SchemaFieldDefinition[];
+  items?: SchemaFieldDefinition;
+  enum?: string[];
+}
+
+/** Grouping of schemas by their frontend domain (TLD). */
+export interface TLDGroup {
+  /** The domain URL, or null for unassigned schemas */
+  domain: string | null;
+  /** Health status of the domain */
+  health: 'online' | 'offline' | 'checking' | 'unknown';
+  /** Latency in ms (only when online) */
+  latency_ms?: number;
+  /** All schemas registered to this TLD */
+  schemas: PageSchema[];
+}

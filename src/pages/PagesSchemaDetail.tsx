@@ -1,0 +1,343 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+  Plus, Settings, ArrowLeft, Loader2, FileText, Globe,
+  Pencil, Trash2, ExternalLink, Eye, MoreVertical
+} from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { getSchema, getPagesBySchema, deletePage, updatePageStatus, checkDomainHealthDirect } from '@/services/pageService';
+import { SchemaWaitingScreen } from '@/components/pagebuilder/SchemaWaitingScreen';
+import type { PageSchema, PageRecord } from '@/types/pagebuilder';
+import { useTheme } from '@/contexts/ThemeContext';
+import { toast } from 'sonner';
+
+const statusBadgeVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  draft: 'secondary',
+  published: 'default',
+  archived: 'destructive',
+};
+
+const PagesSchemaDetail: React.FC = () => {
+  const { schemaSlug } = useParams<{ schemaSlug: string }>();
+  const navigate = useNavigate();
+  const { language } = useTheme();
+
+  const [schema, setSchema] = useState<(PageSchema & { page_count: number }) | null>(null);
+  const [pages, setPages] = useState<PageRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [health, setHealth] = useState<'online' | 'offline' | 'checking' | null>(null);
+  const [deletePageId, setDeletePageId] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    if (!schemaSlug) return;
+    try {
+      setIsLoading(true);
+      const schemaData = await getSchema(schemaSlug);
+      setSchema(schemaData);
+
+      const pagesData = await getPagesBySchema(schemaData.id);
+      setPages(pagesData);
+
+      // Check domain health for registered schemas
+      if (schemaData.registration_status === 'registered' && schemaData.frontend_url) {
+        setHealth('checking');
+        checkDomainHealthDirect(schemaData.frontend_url).then(result => {
+          setHealth(result.status);
+        });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load schema');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [schemaSlug]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleDeletePage = async () => {
+    if (!deletePageId) return;
+    try {
+      await deletePage(deletePageId);
+      setPages(prev => prev.filter(p => p.id !== deletePageId));
+      toast.success(language === 'en' ? 'Page deleted' : 'Seite gelöscht');
+    } catch {
+      toast.error(language === 'en' ? 'Failed to delete page' : 'Fehler beim Löschen');
+    } finally {
+      setDeletePageId(null);
+    }
+  };
+
+  const handleStatusChange = async (pageId: string, status: 'draft' | 'published' | 'archived') => {
+    try {
+      await updatePageStatus(pageId, status);
+      setPages(prev => prev.map(p => p.id === pageId ? { ...p, status, is_draft: status === 'draft' } : p));
+      toast.success(language === 'en' ? `Status changed to ${status}` : `Status geändert zu ${status}`);
+    } catch {
+      toast.error(language === 'en' ? 'Failed to update status' : 'Fehler beim Aktualisieren');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error || !schema) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="text-red-500">{error || 'Schema not found'}</div>
+      </div>
+    );
+  }
+
+  // Show waiting screen if schema is in waiting status
+  if (schema.registration_status === 'waiting') {
+    return (
+      <div className="container mx-auto py-8 space-y-4">
+        <Button variant="ghost" onClick={() => navigate('/pages')} className="mb-4">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          {language === 'en' ? 'Back to Pages' : 'Zurück zu Seiten'}
+        </Button>
+        <SchemaWaitingScreen schema={schema} onStatusChange={fetchData} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto py-8 space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate('/pages')}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold">{schema.name}</h1>
+            <Badge variant={schema.registration_status === 'registered' ? 'default' : 'secondary'}>
+              {schema.registration_status}
+            </Badge>
+            {health && (
+              <Badge variant={health === 'online' ? 'default' : health === 'checking' ? 'outline' : 'destructive'}>
+                <Globe className="h-3 w-3 mr-1" />
+                {health === 'checking' ? '...' : health.toUpperCase()}
+              </Badge>
+            )}
+          </div>
+          {schema.description && (
+            <p className="text-muted-foreground mt-1">{schema.description}</p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => navigate(`/pages/schema/${schemaSlug}/settings`)}>
+            <Settings className="h-4 w-4 mr-2" />
+            {language === 'en' ? 'Schema Settings' : 'Schema-Einstellungen'}
+          </Button>
+          <Button onClick={() => navigate(`/pages/schema/${schemaSlug}/new`)}>
+            <Plus className="h-4 w-4 mr-2" />
+            {language === 'en' ? 'New Page' : 'Neue Seite'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Domain Info Panel */}
+      {schema.registration_status === 'registered' && schema.frontend_url && (
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center gap-6 text-sm">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">Domain:</span>
+                <a
+                  href={schema.frontend_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:underline flex items-center gap-1"
+                >
+                  {schema.frontend_url}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <Separator orientation="vertical" className="h-4" />
+              <div>
+                <span className="font-medium">{language === 'en' ? 'Slug Pattern' : 'Slug-Muster'}:</span>{' '}
+                <code className="bg-muted px-1 rounded text-xs">{schema.slug_structure}</code>
+              </div>
+              {schema.revalidation_endpoint && (
+                <>
+                  <Separator orientation="vertical" className="h-4" />
+                  <div>
+                    <span className="font-medium">ISR:</span>{' '}
+                    <code className="bg-muted px-1 rounded text-xs">{schema.revalidation_endpoint}</code>
+                  </div>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Pages List */}
+      <div>
+        <h2 className="text-xl font-semibold mb-4">
+          {language === 'en' ? 'Pages' : 'Seiten'} ({pages.length})
+        </h2>
+
+        {pages.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <FileText className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">
+                {language === 'en' ? 'No pages yet' : 'Noch keine Seiten'}
+              </h3>
+              <p className="text-muted-foreground text-center mb-4">
+                {language === 'en'
+                  ? 'Create your first page using this schema.'
+                  : 'Erstelle deine erste Seite mit diesem Schema.'}
+              </p>
+              <Button onClick={() => navigate(`/pages/schema/${schemaSlug}/new`)}>
+                <Plus className="h-4 w-4 mr-2" />
+                {language === 'en' ? 'Create Page' : 'Seite erstellen'}
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {pages.map((page) => (
+              <Card key={page.id} className="hover:shadow-sm transition-shadow">
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                      <div className="min-w-0">
+                        <h3 className="font-medium truncate">{page.name}</h3>
+                        <p className="text-sm text-muted-foreground truncate">
+                          /{page.slug}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <Badge variant={statusBadgeVariant[page.status] || 'secondary'}>
+                        {page.status}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {new Date(page.updated_at).toLocaleDateString(language === 'en' ? 'en-US' : 'de-DE')}
+                      </span>
+
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => navigate(`/pages/schema/${schemaSlug}/edit/${page.id}`)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        {schema.frontend_url && page.status === 'published' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            asChild
+                          >
+                            <a
+                              href={`${schema.frontend_url}${schema.slug_structure.replace(':slug', page.slug)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {page.status !== 'published' && (
+                              <DropdownMenuItem onClick={() => handleStatusChange(page.id, 'published')}>
+                                {language === 'en' ? 'Publish' : 'Veröffentlichen'}
+                              </DropdownMenuItem>
+                            )}
+                            {page.status !== 'draft' && (
+                              <DropdownMenuItem onClick={() => handleStatusChange(page.id, 'draft')}>
+                                {language === 'en' ? 'Unpublish' : 'Zurückziehen'}
+                              </DropdownMenuItem>
+                            )}
+                            {page.status !== 'archived' && (
+                              <DropdownMenuItem onClick={() => handleStatusChange(page.id, 'archived')}>
+                                {language === 'en' ? 'Archive' : 'Archivieren'}
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => setDeletePageId(page.id)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              {language === 'en' ? 'Delete' : 'Löschen'}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deletePageId} onOpenChange={() => setDeletePageId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {language === 'en' ? 'Delete Page?' : 'Seite löschen?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {language === 'en'
+                ? 'This action cannot be undone. The page and all its content will be permanently deleted.'
+                : 'Diese Aktion kann nicht rückgängig gemacht werden. Die Seite und alle Inhalte werden dauerhaft gelöscht.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              {language === 'en' ? 'Cancel' : 'Abbrechen'}
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeletePage} className="bg-destructive text-destructive-foreground">
+              {language === 'en' ? 'Delete' : 'Löschen'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+};
+
+export default PagesSchemaDetail;
