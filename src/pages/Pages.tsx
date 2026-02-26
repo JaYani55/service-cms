@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, FileText, Globe, Clock, CheckCircle2, AlertCircle,
-  Loader2, Copy, ExternalLink, Sparkles, ArrowRight, ChevronDown, ChevronRight,
+  Loader2, Copy, ExternalLink, Sparkles, ArrowRight, ChevronDown, ChevronRight, Play,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { getSchemas, groupSchemasByTLD, checkDomainHealthDirect } from '@/services/pageService';
+import { getSchemas, groupSchemasByTLD, checkDomainHealthDirect, startSchemaRegistration } from '@/services/pageService';
 import type { PageSchema, TLDGroup } from '@/types/pagebuilder';
 import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
@@ -29,30 +29,17 @@ const statusConfig: Record<string, { label: { en: string; de: string }; variant:
 
 // ─── Onboarding Empty State ─────────────────────────────────────────────────
 
-const EXAMPLE_PROMPT = `Navigate to the CMS API to discover available schemas:
-  {API_URL}/api/schemas
-
-Pick a schema, fetch its spec_url, then build a
-Next.js (or SvelteKit) frontend that renders pages
-matching that schema from Supabase.
-
-After deploying, register your frontend by POSTing to
-the schema's register_url with the registration code
-shown in the CMS, your domain URL, and revalidation
-endpoint.
-
-MCP endpoint for agent integration:
-  {API_URL}/mcp`;
-
 interface OnboardingScreenProps {
   language: string;
   schemas: PageSchema[];
   onCreateSchema: () => void;
   onNavigateSchema: (slug: string) => void;
+  onRefresh: () => void;
 }
 
-const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ language, schemas, onCreateSchema, onNavigateSchema }) => {
+const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ language, schemas, onCreateSchema, onNavigateSchema, onRefresh }) => {
   const [copied, setCopied] = useState(false);
+  const [startingRegId, setStartingRegId] = useState<string | null>(null);
 
   const handleCopy = async (text: string) => {
     try {
@@ -64,6 +51,49 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ language, schemas, 
       toast.error('Copy failed');
     }
   };
+
+  const handleStartRegistration = async (schemaId: string) => {
+    setStartingRegId(schemaId);
+    try {
+      await startSchemaRegistration(schemaId);
+      toast.success(language === 'en' ? 'Registration started — code generated' : 'Registrierung gestartet — Code generiert');
+      onRefresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to start registration');
+    } finally {
+      setStartingRegId(null);
+    }
+  };
+
+  // Build dynamic prompt that includes registration codes for waiting schemas
+  const waitingSchemas = schemas.filter(s => s.registration_status === 'waiting');
+  const dynamicPrompt = (() => {
+    let prompt = `Navigate to the CMS API to discover available schemas:
+  ${API_URL}/api/schemas
+
+Pick a schema, fetch its spec_url, then build a
+Next.js (or SvelteKit) frontend that renders pages
+matching that schema from Supabase.
+
+After deploying, register your frontend by POSTing to
+the schema's register_url with the registration code,
+your domain URL, and revalidation endpoint.`;
+
+    if (waitingSchemas.length > 0) {
+      prompt += '\n\n--- ACTIVE REGISTRATION CODES ---';
+      for (const s of waitingSchemas) {
+        prompt += `\nSchema: ${s.name} (${s.slug})`;
+        prompt += `\n  Code: ${s.registration_code}`;
+        prompt += `\n  Spec: ${API_URL}/api/schemas/${s.slug}/spec.txt`;
+        prompt += `\n  Register: POST ${API_URL}/api/schemas/${s.slug}/register`;
+      }
+    }
+
+    prompt += `\n\nMCP endpoint for agent integration:
+  ${API_URL}/mcp`;
+
+    return prompt;
+  })();
 
   return (
     <div className="container mx-auto py-8 space-y-6 max-w-4xl">
@@ -259,14 +289,14 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ language, schemas, 
               {language === 'en' ? 'Example Agent Prompt' : 'Beispiel-Prompt für den Agenten'}
             </h3>
             <div className="relative">
-              <pre className="bg-white/70 dark:bg-black/30 border border-amber-200 dark:border-amber-700/50 p-4 rounded-lg text-xs font-mono text-amber-900/90 dark:text-amber-200/80 whitespace-pre-wrap leading-relaxed overflow-auto max-h-52">
-{EXAMPLE_PROMPT.replace(/\{API_URL\}/g, API_URL)}
+              <pre className="bg-white/70 dark:bg-black/30 border border-amber-200 dark:border-amber-700/50 p-4 rounded-lg text-xs font-mono text-amber-900/90 dark:text-amber-200/80 whitespace-pre-wrap leading-relaxed overflow-auto max-h-64">
+{dynamicPrompt}
               </pre>
               <Button
                 variant="ghost"
                 size="sm"
                 className="absolute top-2 right-2 h-7 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-800/30"
-                onClick={() => handleCopy(EXAMPLE_PROMPT.replace(/\{API_URL\}/g, API_URL))}
+                onClick={() => handleCopy(dynamicPrompt)}
               >
                 <Copy className="h-3 w-3 mr-1" />
                 {language === 'en' ? 'Copy' : 'Kopieren'}
@@ -290,14 +320,16 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ language, schemas, 
                 {schemas.map((schema) => {
                   const status = statusConfig[schema.registration_status] || statusConfig.pending;
                   const StatusIcon = status.icon;
+                  const isPending = schema.registration_status === 'pending';
+                  const isWaiting = schema.registration_status === 'waiting';
+                  const isStarting = startingRegId === schema.id;
                   return (
                     <div
                       key={schema.id}
-                      className="bg-white/70 dark:bg-black/30 rounded-xl p-4 border border-amber-200/80 dark:border-amber-700/40 cursor-pointer hover:border-amber-400 dark:hover:border-amber-500 hover:shadow-md transition-all space-y-2"
-                      onClick={() => onNavigateSchema(schema.slug)}
+                      className="bg-white/70 dark:bg-black/30 rounded-xl p-4 border border-amber-200/80 dark:border-amber-700/40 hover:border-amber-400 dark:hover:border-amber-500 hover:shadow-md transition-all space-y-3"
                     >
                       <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex items-center gap-2 min-w-0 cursor-pointer" onClick={() => onNavigateSchema(schema.slug)}>
                           <FileText className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                           <span className="font-medium text-sm text-amber-900 dark:text-amber-100 truncate">{schema.name}</span>
                         </div>
@@ -308,7 +340,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ language, schemas, 
                             </Badge>
                           )}
                           <Badge variant={status.variant} className="flex items-center gap-1 text-[10px]">
-                            <StatusIcon className={`h-2.5 w-2.5 ${schema.registration_status === 'waiting' ? 'animate-spin' : ''}`} />
+                            <StatusIcon className={`h-2.5 w-2.5 ${isWaiting ? 'animate-spin' : ''}`} />
                             {status.label[language]}
                           </Badge>
                         </div>
@@ -316,9 +348,45 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ language, schemas, 
                       {schema.description && (
                         <p className="text-xs text-amber-800/60 dark:text-amber-300/50 line-clamp-2">{schema.description}</p>
                       )}
-                      <div className="flex items-center text-xs text-amber-600 dark:text-amber-400 font-medium">
-                        {language === 'en' ? 'View schema' : 'Schema ansehen'}
-                        <ArrowRight className="h-3 w-3 ml-1" />
+
+                      {/* Registration Code display for waiting schemas */}
+                      {isWaiting && schema.registration_code && (
+                        <div className="bg-amber-100/60 dark:bg-amber-900/20 rounded-lg p-3 border border-amber-300/50 dark:border-amber-700/30 space-y-1.5">
+                          <p className="text-[10px] font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wider">
+                            {language === 'en' ? 'Registration Code' : 'Registrierungscode'}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 bg-white/80 dark:bg-black/30 px-3 py-1.5 rounded font-mono text-sm tracking-wider text-amber-900 dark:text-amber-200 select-all text-center">
+                              {schema.registration_code}
+                            </code>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-amber-700 dark:text-amber-400 hover:bg-amber-200/50"
+                              onClick={(e) => { e.stopPropagation(); handleCopy(schema.registration_code!); }}
+                            >
+                              {copied ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center text-xs text-amber-600 dark:text-amber-400 font-medium cursor-pointer" onClick={() => onNavigateSchema(schema.slug)}>
+                          {language === 'en' ? 'View schema' : 'Schema ansehen'}
+                          <ArrowRight className="h-3 w-3 ml-1" />
+                        </div>
+                        {isPending && (
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                            disabled={isStarting}
+                            onClick={(e) => { e.stopPropagation(); handleStartRegistration(schema.id); }}
+                          >
+                            {isStarting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Play className="h-3 w-3 mr-1" />}
+                            {language === 'en' ? 'Start Registration' : 'Registrierung starten'}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   );
@@ -554,6 +622,7 @@ const Pages: React.FC = () => {
         schemas={schemas}
         onCreateSchema={() => navigate('/pages/schema/new')}
         onNavigateSchema={(slug) => navigate(`/pages/schema/${slug}`)}
+        onRefresh={fetchAndGroup}
       />
     );
   }

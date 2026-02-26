@@ -24,7 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { getSchema, getPagesBySchema, deletePage, updatePageStatus, checkDomainHealthDirect } from '@/services/pageService';
+import { getSchema, getPagesBySchema, deletePage, updatePageStatus, checkDomainHealthDirect, startSchemaRegistration } from '@/services/pageService';
 import { SchemaWaitingScreen } from '@/components/pagebuilder/SchemaWaitingScreen';
 import type { PageSchema, PageRecord } from '@/types/pagebuilder';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -47,6 +47,7 @@ const PagesSchemaDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [health, setHealth] = useState<'online' | 'offline' | 'checking' | null>(null);
   const [deletePageId, setDeletePageId] = useState<string | null>(null);
+  const [isStartingRegistration, setIsStartingRegistration] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!schemaSlug) return;
@@ -75,6 +76,20 @@ const PagesSchemaDetail: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const handleStartRegistration = async () => {
+    if (!schema) return;
+    setIsStartingRegistration(true);
+    try {
+      await startSchemaRegistration(schema.id);
+      toast.success(language === 'en' ? 'Registration started — code generated' : 'Registrierung gestartet — Code generiert');
+      fetchData();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to start registration');
+    } finally {
+      setIsStartingRegistration(false);
+    }
+  };
 
   const handleDeletePage = async () => {
     if (!deletePageId) return;
@@ -163,6 +178,34 @@ const PagesSchemaDetail: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* Registration CTA for pending schemas */}
+      {schema.registration_status === 'pending' && (
+        <Card className="border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20">
+          <CardContent className="py-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <h3 className="font-semibold text-amber-900 dark:text-amber-200">
+                  {language === 'en' ? 'No frontend connected' : 'Kein Frontend verbunden'}
+                </h3>
+                <p className="text-sm text-amber-800/70 dark:text-amber-300/60">
+                  {language === 'en'
+                    ? 'Start registration to generate a code and spec URL for an AI agent or developer to build and connect a frontend.'
+                    : 'Starte die Registrierung, um einen Code und eine Spec-URL zu generieren, mit der ein KI-Agent oder Entwickler ein Frontend bauen und verbinden kann.'}
+                </p>
+              </div>
+              <Button
+                onClick={handleStartRegistration}
+                disabled={isStartingRegistration}
+                className="bg-amber-600 hover:bg-amber-700 text-white shrink-0 ml-4"
+              >
+                {isStartingRegistration && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {language === 'en' ? 'Start Registration' : 'Registrierung starten'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Domain Info Panel */}
       {schema.registration_status === 'registered' && schema.frontend_url && (
