@@ -30,3 +30,58 @@ create index idx_pages_schema_id on public.pages using btree (schema_id) tablesp
 update public.pages
   set schema_id = (select id from public.page_schemas where slug = 'service-product' limit 1)
   where schema_id is null;
+
+-- ─── Row Level Security ──────────────────────────────────────────────────────
+-- Uses custom JWT claims from access hook: (current_setting('request.jwt.claims', true))::jsonb -> 'user_roles'
+-- DROP IF EXISTS makes this section safe to re-run (idempotent).
+
+alter table public.pages enable row level security;
+
+drop policy if exists "authenticated_select_pages" on public.pages;
+drop policy if exists "anon_select_pages"           on public.pages;
+drop policy if exists "staff_insert_pages"          on public.pages;
+drop policy if exists "staff_update_pages"          on public.pages;
+drop policy if exists "admin_delete_pages"          on public.pages;
+
+-- Read: any authenticated user or anon (public pages)
+create policy "authenticated_select_pages"
+  on public.pages
+  for select
+  to authenticated
+  using (true);
+
+create policy "anon_select_pages"
+  on public.pages
+  for select
+  to anon
+  using (true);
+
+-- Insert: staff or super-admin
+create policy "staff_insert_pages"
+  on public.pages
+  for insert
+  to authenticated
+  with check (
+    (current_setting('request.jwt.claims', true))::jsonb -> 'user_roles' ?| array['staff', 'super-admin']
+  );
+
+-- Update: staff or super-admin
+create policy "staff_update_pages"
+  on public.pages
+  for update
+  to authenticated
+  using (
+    (current_setting('request.jwt.claims', true))::jsonb -> 'user_roles' ?| array['staff', 'super-admin']
+  )
+  with check (
+    (current_setting('request.jwt.claims', true))::jsonb -> 'user_roles' ?| array['staff', 'super-admin']
+  );
+
+-- Delete: super-admin only
+create policy "admin_delete_pages"
+  on public.pages
+  for delete
+  to authenticated
+  using (
+    (current_setting('request.jwt.claims', true))::jsonb -> 'user_roles' ?| array['super-admin']
+  );

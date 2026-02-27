@@ -34,3 +34,59 @@ create trigger trg_sync_is_draft BEFORE INSERT
 or
 update OF status on products for EACH row
 execute FUNCTION sync_is_draft_with_status ();
+
+-- ─── Row Level Security ──────────────────────────────────────────────────────
+-- Note: This table is renamed to `pages` in the pages.sql migration.
+-- RLS policies here apply to the original table name before migration.
+-- DROP IF EXISTS makes this section safe to re-run (idempotent).
+
+alter table public.products enable row level security;
+
+drop policy if exists "authenticated_select_products" on public.products;
+drop policy if exists "anon_select_products"           on public.products;
+drop policy if exists "staff_insert_products"          on public.products;
+drop policy if exists "staff_update_products"          on public.products;
+drop policy if exists "admin_delete_products"          on public.products;
+
+-- Read: any authenticated user
+create policy "authenticated_select_products"
+  on public.products
+  for select
+  to authenticated
+  using (true);
+
+create policy "anon_select_products"
+  on public.products
+  for select
+  to anon
+  using (true);
+
+-- Insert: staff or super-admin
+create policy "staff_insert_products"
+  on public.products
+  for insert
+  to authenticated
+  with check (
+    (current_setting('request.jwt.claims', true))::jsonb -> 'user_roles' ?| array['staff', 'super-admin']
+  );
+
+-- Update: staff or super-admin
+create policy "staff_update_products"
+  on public.products
+  for update
+  to authenticated
+  using (
+    (current_setting('request.jwt.claims', true))::jsonb -> 'user_roles' ?| array['staff', 'super-admin']
+  )
+  with check (
+    (current_setting('request.jwt.claims', true))::jsonb -> 'user_roles' ?| array['staff', 'super-admin']
+  );
+
+-- Delete: super-admin only
+create policy "admin_delete_products"
+  on public.products
+  for delete
+  to authenticated
+  using (
+    (current_setting('request.jwt.claims', true))::jsonb -> 'user_roles' ?| array['super-admin']
+  );

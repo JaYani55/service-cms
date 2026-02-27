@@ -11,7 +11,8 @@ import {
   UserCheck, 
   Tags, 
   BarChart3, 
-  Plus
+  Plus,
+  ShieldCheck
 } from 'lucide-react';
 import { AdminCard } from '@/components/admin/ui/AdminCard'; // Add this import
 
@@ -114,9 +115,24 @@ const Verwaltung = () => {
     },
   ];
 
+  // Account Administration Cards (super-admin only)
+  const accountCards: AdminCardType[] = [
+    {
+      title: language === 'de' ? 'Kontoverwaltung' : 'Account Management',
+      description: language === 'de' 
+        ? 'Benutzerkonten, Rollen und Zugriffsrechte verwalten' 
+        : 'Manage user accounts, roles and access permissions',
+      icon: ShieldCheck,
+      href: '/verwaltung/accounts',
+      permission: 'canManageAccounts',
+      color: 'from-indigo-500 to-indigo-600',
+    },
+  ];
+
   // Filter cards based on permissions
   const visibleMentorCards = mentorCards.filter(card => permissions[card.permission]);
   const visibleProductCards = productCards.filter(card => permissions[card.permission]);
+  const visibleAccountCards = accountCards.filter(card => permissions[card.permission]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -222,8 +238,42 @@ const Verwaltung = () => {
             </div>
           )}
 
+          {/* Account Administration Section (super-admin only) */}
+          {visibleAccountCards.length > 0 && (
+            <div>
+              <div className="mb-8">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                  {language === 'de' ? 'Konto-Verwaltung' : 'Account Administration'}
+                </h2>
+                <p className="text-gray-600 dark:text-gray-400">
+                  {language === 'de' 
+                    ? 'Benutzerkonten und Rollen zentral verwalten' 
+                    : 'Centrally manage user accounts and roles'
+                  }
+                </p>
+              </div>
+              
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
+                {visibleAccountCards.map((card) => (
+                  <AdminCard
+                    key={card.href}
+                    title={card.title}
+                    icon={card.icon}
+                    iconColor={card.color}
+                    clickable={true}
+                    onClick={() => navigate(card.href)}
+                  >
+                    <div className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                      {card.description}
+                    </div>
+                  </AdminCard>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* No Access Message */}
-          {visibleMentorCards.length === 0 && visibleProductCards.length === 0 && (
+          {visibleMentorCards.length === 0 && visibleProductCards.length === 0 && visibleAccountCards.length === 0 && (
             <div className="text-center py-16">
               <div className="w-24 h-24 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mx-auto mb-6">
                 <Settings className="h-12 w-12 text-gray-400" />

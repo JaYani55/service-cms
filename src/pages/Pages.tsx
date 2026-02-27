@@ -17,6 +17,7 @@ import { getSchemas, groupSchemasByTLD, checkDomainHealthDirect, startSchemaRegi
 import type { PageSchema, TLDGroup } from '@/types/pagebuilder';
 import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
+import AgentLogs from '@/components/pagebuilder/AgentLogs';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
 
@@ -409,6 +410,9 @@ your domain URL, and revalidation endpoint.`;
           </div>
         </div>
       </div>
+
+      {/* Agent Communication Logs */}
+      <AgentLogs language={language} schemas={schemas} />
     </div>
   );
 };
@@ -660,6 +664,9 @@ const Pages: React.FC = () => {
           />
         ))}
       </div>
+
+      {/* Agent Communication Logs */}
+      <AgentLogs language={language} schemas={schemas} />
     </div>
   );
 };

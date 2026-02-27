@@ -4,7 +4,9 @@ import { HTTPException } from 'hono/http-exception';
 import type { Env } from './lib/supabase';
 import schemas from './routes/schemas';
 import health from './routes/health';
+import logs from './routes/logs';
 import mcpRoute from './routes/mcp';
+import { agentLogger } from './middleware/agentLogger';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -30,7 +32,13 @@ app.get('/', (c) => {
   });
 });
 
-// Mount routes
+// Logging middleware — logs ALL API and MCP requests (skips /api/schemas/logs internally)
+app.use('/api/*', agentLogger);
+app.use('/mcp', agentLogger);
+app.use('/mcp/*', agentLogger);
+
+// Mount routes (logs first — more specific path before wildcard schemas)
+app.route('/api/schemas/logs', logs);
 app.route('/api/schemas', schemas);
 app.route('/api/schemas', health);
 app.route('/mcp', mcpRoute);

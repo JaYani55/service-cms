@@ -152,3 +152,35 @@ export interface TLDGroup {
   /** All schemas registered to this TLD */
   schemas: PageSchema[];
 }
+
+// --- Agent Log Types ---
+
+export interface AgentLog {
+  id: string;
+  schema_id: string | null;
+  schema_slug: string | null;
+  method: string;
+  path: string;
+  status_code: number | null;
+  request_body: Record<string, unknown> | null;
+  response_body: Record<string, unknown> | null;
+  duration_ms: number | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  error: string | null;
+  created_at: string;
+}
+
+export interface AgentLogStats {
+  total: number;
+  last_24h: number;
+  errors: number;
+  unique_agents: number;
+}
+
+export interface AgentLogPagination {
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+}

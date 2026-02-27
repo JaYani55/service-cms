@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, type UseFormReturn, type FieldValues } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -142,12 +142,7 @@ export const PageBuilderForm: React.FC<PageBuilderFormProps> = ({ initialData, p
       if (isSchemaMode && schema) {
         // Schema-driven mode: save to pages table
         const name = pageName || productName || 'Untitled';
-        const result = await savePage(productId || undefined, {
-          name,
-          content: data,
-          schema_id: schema.id,
-          status: 'draft',
-        });
+        const result = await savePage(productId || undefined, data as unknown as Record<string, unknown>, name, schema.id);
         setSavedSlug(result.slug);
         toast.success('Page saved successfully!');
 
@@ -206,13 +201,13 @@ export const PageBuilderForm: React.FC<PageBuilderFormProps> = ({ initialData, p
         <HeroForm form={form} />
 
         {/* Features Section */}
-        <FeaturesForm form={form} />
+        <FeaturesForm form={form as unknown as UseFormReturn<FieldValues>} />
 
         {/* Cards Section */}
-        <CardsForm form={form} />
+        <CardsForm form={form as unknown as UseFormReturn<FieldValues>} />
 
         {/* FAQ Section */}
-        <FaqForm form={form} />
+        <FaqForm form={form as unknown as UseFormReturn<FieldValues>} />
 
         {/* CTA Section */}
         <CtaForm form={form} />

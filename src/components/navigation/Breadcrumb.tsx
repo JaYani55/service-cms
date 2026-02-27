@@ -52,6 +52,10 @@ const Breadcrumb: React.FC = () => {
       label: { en: 'Assign Traits', de: 'Eigenschaften zuweisen' },
       parent: '/verwaltung'
     },
+    '/verwaltung/accounts': { 
+      label: { en: 'Account Management', de: 'Kontoverwaltung' },
+      parent: '/verwaltung'
+    },
     '/pages': { label: { en: 'Pages', de: 'Seiten' } },
     '/pages/schema/new': {
       label: { en: 'New Schema', de: 'Neues Schema' },

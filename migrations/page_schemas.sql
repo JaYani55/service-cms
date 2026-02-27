@@ -204,3 +204,77 @@ values (
   'pending',
   true
 );
+
+-- ─── Row Level Security ──────────────────────────────────────────────────────
+-- Uses custom JWT claims from access hook: (current_setting('request.jwt.claims', true))::jsonb -> 'user_roles'
+-- Read: all authenticated users.  Write: staff / super-admin only.
+-- DROP IF EXISTS makes this section safe to re-run (idempotent).
+
+alter table public.page_schemas enable row level security;
+
+drop policy if exists "authenticated_select_page_schemas" on public.page_schemas;
+drop policy if exists "anon_select_page_schemas"           on public.page_schemas;
+drop policy if exists "staff_insert_page_schemas"          on public.page_schemas;
+drop policy if exists "anon_insert_page_schemas"           on public.page_schemas;
+drop policy if exists "staff_update_page_schemas"          on public.page_schemas;
+drop policy if exists "anon_update_page_schemas"           on public.page_schemas;
+drop policy if exists "admin_delete_page_schemas"          on public.page_schemas;
+
+-- Read: any authenticated user
+create policy "authenticated_select_page_schemas"
+  on public.page_schemas
+  for select
+  to authenticated
+  using (true);
+
+-- Anon read (API uses anon key for public spec endpoints)
+create policy "anon_select_page_schemas"
+  on public.page_schemas
+  for select
+  to anon
+  using (true);
+
+-- Insert: staff or super-admin (via JWT custom claims)
+create policy "staff_insert_page_schemas"
+  on public.page_schemas
+  for insert
+  to authenticated
+  with check (
+    (current_setting('request.jwt.claims', true))::jsonb -> 'user_roles' ?| array['staff', 'super-admin']
+  );
+
+-- Anon insert (API writes via anon key — registration flow)
+create policy "anon_insert_page_schemas"
+  on public.page_schemas
+  for insert
+  to anon
+  with check (true);
+
+-- Update: staff or super-admin
+create policy "staff_update_page_schemas"
+  on public.page_schemas
+  for update
+  to authenticated
+  using (
+    (current_setting('request.jwt.claims', true))::jsonb -> 'user_roles' ?| array['staff', 'super-admin']
+  )
+  with check (
+    (current_setting('request.jwt.claims', true))::jsonb -> 'user_roles' ?| array['staff', 'super-admin']
+  );
+
+-- Anon update (API writes via anon key — registration flow)
+create policy "anon_update_page_schemas"
+  on public.page_schemas
+  for update
+  to anon
+  using (true)
+  with check (true);
+
+-- Delete: super-admin only
+create policy "admin_delete_page_schemas"
+  on public.page_schemas
+  for delete
+  to authenticated
+  using (
+    (current_setting('request.jwt.claims', true))::jsonb -> 'user_roles' ?| array['super-admin']
+  );
