@@ -22,7 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.wrangler
+*.wrangler
 # Environment variables
 .env
 .env.local
@@ -30,3 +30,7 @@ dist-ssr
 .env.staging
 .env.production
 .env*.local
+
+# Wrangler local dev cache
+.wrangler/
+.wrangler/**
