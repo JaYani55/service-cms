@@ -133,6 +133,20 @@ export const deleteSchema = async (id: string): Promise<void> => {
   if (error) throw new Error(error.message);
 };
 
+export const unhookSchema = async (id: string): Promise<void> => {
+  const { error } = await supabase
+    .from('page_schemas')
+    .update({
+      registration_status: 'pending',
+      frontend_url: null,
+      revalidation_endpoint: null,
+      revalidation_secret: null,
+    })
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
+};
+
 export const startSchemaRegistration = async (id: string): Promise<PageSchema> => {
   const registrationCode = generateRegistrationCode();
 

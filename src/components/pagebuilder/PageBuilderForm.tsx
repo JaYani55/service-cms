@@ -16,10 +16,10 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { saveProductPage } from '@/services/productPageService';
-import { savePage, triggerRevalidation } from '@/services/pageService';
 import { toast } from 'sonner';
 import { Save, Eye, Loader2, ExternalLink } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { SchemaPageBuilderForm } from './SchemaPageBuilderForm';
 
 const ContentBlockSchema = z.union([
   z.object({
@@ -117,11 +117,11 @@ interface PageBuilderFormProps {
 }
 
 export const PageBuilderForm: React.FC<PageBuilderFormProps> = ({ initialData, productId, productName, schema, schemaSlug }) => {
+  // All hooks must be declared unconditionally (Rules of Hooks).
+  // Schema-driven rendering delegates to SchemaPageBuilderForm below.
   const [isSaving, setIsSaving] = useState(false);
   const [savedSlug, setSavedSlug] = useState<string | null>(null);
   const [pageName, setPageName] = useState(productName || '');
-
-  const isSchemaMode = !!schema;
 
   const form = useForm<PageBuilderData>({
     resolver: zodResolver(PageBuilderSchema),
@@ -136,36 +136,30 @@ export const PageBuilderForm: React.FC<PageBuilderFormProps> = ({ initialData, p
     },
   });
 
+  // ── Schema-driven mode: delegate entirely to SchemaPageBuilderForm ──────────
+  if (schema && schemaSlug) {
+    return (
+      <SchemaPageBuilderForm
+        schema={schema}
+        schemaSlug={schemaSlug}
+        pageId={productId}
+        initialData={initialData as unknown as Record<string, unknown> | null}
+        initialName={productName}
+      />
+    );
+  }
+
+  // ── Legacy mode only below this line ──────────────────────────────────────
   const onSubmit = async (data: PageBuilderData) => {
     setIsSaving(true);
     try {
-      if (isSchemaMode && schema) {
-        // Schema-driven mode: save to pages table
-        const name = pageName || productName || 'Untitled';
-        const result = await savePage(productId || undefined, data as unknown as Record<string, unknown>, name, schema.id);
-        setSavedSlug(result.slug);
-        toast.success('Page saved successfully!');
-
-        // Trigger ISR revalidation if schema is registered
-        if (schema.registration_status === 'registered' && schemaSlug && result.slug) {
-          try {
-            await triggerRevalidation(schemaSlug, result.slug);
-            toast.success('Revalidation triggered');
-          } catch {
-            // ISR failure is not critical
-            toast.warning('Page saved but revalidation failed');
-          }
-        }
-      } else {
-        // Legacy mode
-        if (!productId || !productName) {
-          toast.error('Product ID or name is missing.');
-          return;
-        }
-        const result = await saveProductPage(productId, data, productName);
-        setSavedSlug(result.slug);
-        toast.success('Product page saved successfully!');
+      if (!productId || !productName) {
+        toast.error('Product ID or name is missing.');
+        return;
       }
+      const result = await saveProductPage(productId, data, productName);
+      setSavedSlug(result.slug);
+      toast.success('Product page saved successfully!');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unbekannter Fehler beim Speichern.';
       toast.error(`Failed to save: ${message}`);
@@ -177,25 +171,6 @@ export const PageBuilderForm: React.FC<PageBuilderFormProps> = ({ initialData, p
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-5xl mx-auto pb-20">
-        {/* Page Name (Schema mode only) */}
-        {isSchemaMode && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <span>📝</span>
-                <span>Seitenname</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Input
-                value={pageName}
-                onChange={(e) => setPageName(e.target.value)}
-                placeholder="Name der Seite"
-                className="text-lg"
-              />
-            </CardContent>
-          </Card>
-        )}
 
         {/* Hero Section */}
         <HeroForm form={form} />
@@ -260,18 +235,8 @@ export const PageBuilderForm: React.FC<PageBuilderFormProps> = ({ initialData, p
               <span className="text-green-800 dark:text-green-200">
                 Produktseite erfolgreich gespeichert!
               </span>
-              <Button
-                variant="outline"
-                size="sm"
-                asChild
-                className="ml-4"
-              >
-                <a
-                  href={`https://inklusolutions.de/preview/${savedSlug}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center"
-                >
+              <Button variant="outline" size="sm" asChild className="ml-4">
+                <a href={`/${savedSlug}`} target="_blank" rel="noopener noreferrer" className="flex items-center">
                   <ExternalLink className="h-4 w-4 mr-2" />
                   Vorschau ansehen
                 </a>
@@ -284,10 +249,7 @@ export const PageBuilderForm: React.FC<PageBuilderFormProps> = ({ initialData, p
         <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-t z-50">
           <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              {isSchemaMode
-                ? <>Schema: <span className="font-semibold">{schema?.name}</span> — Seite: <span className="font-semibold">{pageName || 'Unbenannt'}</span></>
-                : <>Produkt: <span className="font-semibold">{productName}</span></>
-              }
+              Produkt: <span className="font-semibold">{productName}</span>
             </p>
             <Button type="submit" size="lg" disabled={isSaving} className="min-w-[200px]">
               {isSaving ? (

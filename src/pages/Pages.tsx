@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, FileText, Globe, Clock, CheckCircle2, AlertCircle,
-  Loader2, Copy, ExternalLink, Sparkles, ArrowRight, ChevronDown, ChevronRight, Play,
+  Loader2, Copy, ExternalLink, Sparkles, ArrowRight, ChevronDown, ChevronRight, Play, Trash2,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { getSchemas, groupSchemasByTLD, checkDomainHealthDirect, startSchemaRegistration } from '@/services/pageService';
+import { getSchemas, groupSchemasByTLD, checkDomainHealthDirect, startSchemaRegistration, unhookSchema } from '@/services/pageService';
 import type { PageSchema, TLDGroup } from '@/types/pagebuilder';
 import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
@@ -41,6 +41,7 @@ interface OnboardingScreenProps {
 const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ language, schemas, onCreateSchema, onNavigateSchema, onRefresh }) => {
   const [copied, setCopied] = useState(false);
   const [startingRegId, setStartingRegId] = useState<string | null>(null);
+  const [selectedFramework, setSelectedFramework] = useState<'nextjs' | 'sveltekit'>('nextjs');
 
   const handleCopy = async (text: string) => {
     try {
@@ -68,33 +69,296 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ language, schemas, 
 
   // Build dynamic prompt that includes registration codes for waiting schemas
   const waitingSchemas = schemas.filter(s => s.registration_status === 'waiting');
-  const dynamicPrompt = (() => {
-    let prompt = `Navigate to the CMS API to discover available schemas:
-  ${API_URL}/api/schemas
 
-Pick a schema, fetch its spec_url, then build a
-Next.js (or SvelteKit) frontend that renders pages
-matching that schema from Supabase.
+  const buildPrompt = (framework: 'nextjs' | 'sveltekit') => {
+    const isNext = framework === 'nextjs';
 
-After deploying, register your frontend by POSTing to
-the schema's register_url with the registration code,
-your domain URL, and revalidation endpoint.`;
+    // ── Section: discovery ──────────────────────────────────────────────────
+    let prompt = `You are building a ${isNext ? 'Next.js (App Router)' : 'SvelteKit'} frontend for the Service-CMS.
 
+════════════════════════════════════════════════════
+  1. DISCOVERY
+════════════════════════════════════════════════════
+
+Start by fetching the schema index:
+  GET ${API_URL}/api/schemas
+
+Response shape:
+  {
+    service: "service-cms-api",
+    mcp_endpoint: "${API_URL}/mcp",
+    schemas: [
+      {
+        slug: string,           // e.g. "service-product"
+        name: string,
+        description: string,
+        status: "pending" | "waiting" | "registered" | "archived",
+        is_default: boolean,
+        frontend_url: string | null,
+        spec_url: "${API_URL}/api/schemas/{slug}/spec.txt",
+        register_url: "${API_URL}/api/schemas/{slug}/register",
+      }
+    ]
+  }
+
+Pick the schema for this frontend. Then fetch its full spec:
+  GET ${API_URL}/api/schemas/{slug}/spec.txt
+
+The spec includes: field definitions (JSON), content block types,
+LLM instructions, frontend info, and registration payload example.
+
+
+════════════════════════════════════════════════════
+  2. DATA MODEL  (pages table via Supabase)
+════════════════════════════════════════════════════
+
+Fetch pages matching the schema:
+  GET https://<SUPABASE_URL>/rest/v1/pages
+    ?schema_id=eq.<schema_uuid>
+    &select=id,slug,name,status,content,domain_url,updated_at
+    &status=eq.published
+
+  Authorization: Bearer <SUPABASE_ANON_KEY>
+  apikey: <SUPABASE_ANON_KEY>
+
+Page shape:
+  {
+    id: string (uuid),
+    slug: string,           // URL path segment, e.g. "my-product"
+    name: string,
+    status: "draft" | "published" | "archived",
+    content: Record<string, unknown>,  // JSONB — shape defined by schema
+    domain_url: string | null,
+    updated_at: string (ISO 8601),
+  }
+
+The "content" field carries ContentBlock arrays.
+Each ContentBlock has { id, type } + type-specific fields:
+  text    → { content: string }
+  heading → { content: string, level: "heading1"…"heading6" }
+  image   → { src: string, alt: string, caption?, width?, height? }
+  quote   → { text: string, author?, source? }
+  list    → { style: "ordered"|"unordered", items: string[] }
+  video   → { src: string, provider: "youtube"|"vimeo"|"other", caption? }`;
+
+    // ── Section: ISR ──────────────────────────────────────────────────────
+    if (isNext) {
+      prompt += `
+
+
+════════════════════════════════════════════════════
+  3. ISR SETUP  (Next.js App Router)
+════════════════════════════════════════════════════
+
+── File: app/[slug]/page.tsx ──
+  export const revalidate = 60; // background ISR every 60 s
+
+  export async function generateStaticParams() {
+    const pages = await fetchPublishedPages(); // your Supabase helper
+    return pages.map(p => ({ slug: p.slug }));
+  }
+
+  export default async function Page({ params }: { params: { slug: string } }) {
+    const page = await fetchPageBySlug(params.slug);
+    if (!page) notFound();
+    return <PageRenderer page={page} />;
+  }
+
+── File: app/api/revalidate/route.ts ──
+  // The CMS calls this endpoint via POST when content is saved.
+  // It sends: POST /api/revalidate?secret=<secret>&path=<page_slug>
+
+  import { revalidatePath } from 'next/cache';
+  import { NextRequest, NextResponse } from 'next/server';
+
+  export async function POST(req: NextRequest) {
+    const secret = req.nextUrl.searchParams.get('secret');
+    const path   = req.nextUrl.searchParams.get('path');   // page_slug from CMS
+
+    if (secret !== process.env.REVALIDATION_SECRET) {
+      return NextResponse.json({ error: 'Invalid secret' }, { status: 401 });
+    }
+    if (!path) {
+      return NextResponse.json({ error: 'Missing path' }, { status: 400 });
+    }
+
+    revalidatePath(\`/\${path}\`);
+    return NextResponse.json({ revalidated: true, path });
+  }`;
+    } else {
+      prompt += `
+
+
+════════════════════════════════════════════════════
+  3. ISR SETUP  (SvelteKit + edge/node adapter)
+════════════════════════════════════════════════════
+
+── File: src/routes/[slug]/+page.server.ts ──
+  import type { PageServerLoad } from './$types';
+  import { error } from '@sveltejs/kit';
+
+  export const load: PageServerLoad = async ({ params, setHeaders }) => {
+    const page = await fetchPageBySlug(params.slug); // your Supabase helper
+    if (!page) throw error(404);
+
+    // Tell the CDN to cache this response.
+    // stale-while-revalidate serves stale content while refetching.
+    setHeaders({
+      'cache-control': 's-maxage=60, stale-while-revalidate=600',
+    });
+
+    return { page };
+  };
+
+── File: src/routes/api/revalidate/[slug]/+server.ts ──
+  // The CMS calls this endpoint via POST when content is saved.
+  // It sends: POST /api/revalidate/<page_slug>?secret=<secret>
+
+  import { json, error } from '@sveltejs/kit';
+  import type { RequestHandler } from './$types';
+
+  export const POST: RequestHandler = async ({ params, url, platform }) => {
+    const secret = url.searchParams.get('secret');
+
+    if (secret !== process.env.REVALIDATION_SECRET) {
+      throw error(401, 'Invalid secret');
+    }
+
+    // Vercel: use unstable_expireRoute / purge tag
+    // Cloudflare: platform.env.CACHE.delete(params.slug)
+    // Netlify:    fetch('/__netlify/builder/revalidate', { method: 'POST', ... })
+    // Generic:    rely on s-maxage + stale-while-revalidate above
+
+    return json({ revalidated: true, slug: params.slug });
+  };`;
+    }
+
+    // ── Section: registration ─────────────────────────────────────────────
+    prompt += `
+
+
+════════════════════════════════════════════════════
+  4. REGISTRATION  (one-time, after deploy)
+════════════════════════════════════════════════════
+
+Once deployed, call the CMS registration endpoint from your frontend
+(e.g. from a startup script, a one-off CLI command, or CI/CD pipeline):
+
+  POST ${API_URL}/api/schemas/{slug}/register
+  Content-Type: application/json
+
+  {
+    "code": "<registration_code>",          // shown in CMS
+    "frontend_url": "https://your-site.com",
+    "revalidation_endpoint": "/api/revalidate",
+    "revalidation_secret": "<shared_secret>", // also set in .env
+    "slug_structure": "/:slug"               // URL pattern — see section 4.5
+  }
+
+Success response (200):
+  {
+    "success": true,
+    "message": "Schema registration completed successfully",
+    "schema": { "slug": "...", "frontend_url": "...", "slug_structure": "/:slug" }
+  }
+
+After registration the CMS will:
+  • Set schema status → "registered"
+  • Show the domain in the Pages dashboard with a health ping
+  • Call POST {frontend_url}{revalidation_endpoint}?secret={secret}&path={page_slug}
+    whenever content for this schema is published or updated`;
+
+    // ── Section: slug_structure ───────────────────────────────────────────
+    prompt += `
+
+
+════════════════════════════════════════════════════
+  4.5 SLUG STRUCTURE & PREVIEW URLS
+════════════════════════════════════════════════════
+
+The "slug_structure" field controls how the CMS builds preview URLs for pages.
+It is a path pattern where ":slug" is replaced with the page's URL slug.
+
+Examples:
+  "/:slug"              → https://your-site.com/my-page
+  "/blog/:slug"         → https://your-site.com/blog/my-post
+  "/products/:slug"     → https://your-site.com/products/my-product
+  "/de/produkte/:slug"  → https://your-site.com/de/produkte/my-product
+
+── How to choose the right slug_structure ──
+1. Look at your ${isNext ? 'Next.js' : 'SvelteKit'} file-system routing:
+   - ${isNext ? 'app/[slug]/page.tsx' : 'src/routes/[slug]/+page.svelte'} → use "/:slug"
+   - ${isNext ? 'app/blog/[slug]/page.tsx' : 'src/routes/blog/[slug]/+page.svelte'} → use "/blog/:slug"
+2. Include the slug_structure in your registration POST body (see step 4).
+3. The CMS Page Builder will then show a live "Vorschau ansehen" button
+   after saving, pointing to: {frontend_url}{slug_structure with :slug replaced}
+
+── Preview slug for draft pages ──
+The CMS saves pages as "draft" by default. To preview before publishing:
+${isNext ? `  • Add a ?draft=true query param and check it in your page component
+  • Or expose a dedicated preview route: app/preview/[slug]/page.tsx
+  • Optionally add a secret: app/api/preview/route.ts → sets a preview cookie` : `  • Add a ?draft=true query param in your +page.server.ts load function
+  • Or add a preview route: src/routes/preview/[slug]/+page.server.ts
+  • Use SvelteKit cookies to mark a preview session`}
+
+── Revalidation path format ──
+The CMS calls your revalidation endpoint with:
+  POST {revalidation_endpoint}?secret={secret}&path={page_slug}
+
+Here "path" is the bare slug (e.g. "my-page"), NOT the full URL path.
+Your revalidation handler should prepend the route prefix if needed:
+  // e.g. for "/blog/:slug", revalidate "/blog/my-page"
+  const fullPath = \`/blog/\${path}\`;`;
+
+    // ── Section: health ───────────────────────────────────────────────────
+    prompt += `
+
+
+════════════════════════════════════════════════════
+  5. HEALTH CHECK
+════════════════════════════════════════════════════
+
+The CMS monitors your domain via:
+  GET ${API_URL}/api/schemas/{slug}/health
+
+Response: { status: "online"|"offline", latency_ms: number, http_status: number }
+
+Your frontend must respond with HTTP 200 to HEAD / for the health check.`;
+
+    // ── Section: MCP ──────────────────────────────────────────────────────
+    prompt += `
+
+
+════════════════════════════════════════════════════
+  6. MCP AGENT INTEGRATION  (optional)
+════════════════════════════════════════════════════
+
+Connect an AI agent to the MCP endpoint for tool-based interaction:
+  ${API_URL}/mcp
+
+Available MCP tools:
+  list_schemas      — list all schemas with spec + register URLs
+  get_schema_spec   — full spec for a schema by slug
+  register_frontend — register a deployed frontend (same as step 4)
+  check_health      — ping a frontend domain URL`;
+
+    // ── Active registration codes ─────────────────────────────────────────
     if (waitingSchemas.length > 0) {
-      prompt += '\n\n--- ACTIVE REGISTRATION CODES ---';
+      prompt += '\n\n\n════════════════════════════════════════════════════';
+      prompt += '\n  ACTIVE REGISTRATION CODES';
+      prompt += '\n════════════════════════════════════════════════════';
       for (const s of waitingSchemas) {
-        prompt += `\nSchema: ${s.name} (${s.slug})`;
-        prompt += `\n  Code: ${s.registration_code}`;
-        prompt += `\n  Spec: ${API_URL}/api/schemas/${s.slug}/spec.txt`;
-        prompt += `\n  Register: POST ${API_URL}/api/schemas/${s.slug}/register`;
+        prompt += `\n\nSchema : ${s.name}  (${s.slug})`;
+        prompt += `\n  Code  : ${s.registration_code}`;
+        prompt += `\n  Spec  : ${API_URL}/api/schemas/${s.slug}/spec.txt`;
+        prompt += `\n  POST  : ${API_URL}/api/schemas/${s.slug}/register`;
       }
     }
 
-    prompt += `\n\nMCP endpoint for agent integration:
-  ${API_URL}/mcp`;
-
     return prompt;
-  })();
+  };
+
+  const dynamicPrompt = buildPrompt(selectedFramework);
 
   return (
     <div className="container mx-auto py-8 space-y-6 max-w-4xl">
@@ -289,6 +553,38 @@ your domain URL, and revalidation endpoint.`;
               <Sparkles className="h-4 w-4" />
               {language === 'en' ? 'Example Agent Prompt' : 'Beispiel-Prompt für den Agenten'}
             </h3>
+
+            {/* Framework Toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-amber-800/70 dark:text-amber-300/60 shrink-0">
+                {language === 'en' ? 'Framework:' : 'Framework:'}
+              </span>
+              <div className="flex gap-1 p-1 rounded-lg bg-amber-100/60 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50">
+                <button
+                  type="button"
+                  onClick={() => setSelectedFramework('nextjs')}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                    selectedFramework === 'nextjs'
+                      ? 'bg-white dark:bg-amber-800/60 text-amber-900 dark:text-amber-100 shadow-sm'
+                      : 'text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200'
+                  }`}
+                >
+                  Next.JS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedFramework('sveltekit')}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                    selectedFramework === 'sveltekit'
+                      ? 'bg-white dark:bg-amber-800/60 text-amber-900 dark:text-amber-100 shadow-sm'
+                      : 'text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200'
+                  }`}
+                >
+                  SvelteKit
+                </button>
+              </div>
+            </div>
+
             <div className="relative">
               <pre className="bg-white/70 dark:bg-black/30 border border-amber-200 dark:border-amber-700/50 p-4 rounded-lg text-xs font-mono text-amber-900/90 dark:text-amber-200/80 whitespace-pre-wrap leading-relaxed overflow-auto max-h-64">
 {dynamicPrompt}
@@ -423,11 +719,32 @@ interface TLDSectionProps {
   group: TLDGroup;
   language: string;
   onNavigate: (path: string) => void;
+  onRefresh: () => void;
   defaultOpen?: boolean;
 }
 
-const TLDSection: React.FC<TLDSectionProps> = ({ group, language, onNavigate, defaultOpen = true }) => {
+const TLDSection: React.FC<TLDSectionProps> = ({ group, language, onNavigate, onRefresh, defaultOpen = true }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [isUnhooking, setIsUnhooking] = useState(false);
+
+  const handleUnhook = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(
+      language === 'en'
+        ? `Disconnect all schemas from "${group.domain}"? This resets their registration status to pending and removes the frontend URL, revalidation endpoint, and secret.`
+        : `Alle Schemas von "${group.domain}" trennen? Dies setzt den Registrierungsstatus auf „Ausstehend" zurück und entfernt Frontend-URL, Revalidierungs-Endpunkt und Secret.`
+    )) return;
+
+    setIsUnhooking(true);
+    try {
+      await Promise.all(group.schemas.map(s => unhookSchema(s.id)));
+      onRefresh();
+    } catch (err) {
+      console.error('Unhook failed', err);
+    } finally {
+      setIsUnhooking(false);
+    }
+  };
   const schemaCount = group.schemas.length;
   const registeredCount = group.schemas.filter(s => s.registration_status === 'registered').length;
 
@@ -496,6 +813,20 @@ const TLDSection: React.FC<TLDSectionProps> = ({ group, language, onNavigate, de
                   >
                     <ExternalLink className="h-4 w-4" />
                   </a>
+                )}
+                {group.domain && registeredCount > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                    disabled={isUnhooking}
+                    onClick={handleUnhook}
+                  >
+                    {isUnhooking
+                      ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      : <Trash2 className="h-3 w-3 mr-1" />}
+                    {language === 'en' ? 'Unhook' : 'Trennen'}
+                  </Button>
                 )}
               </div>
             </div>
@@ -660,6 +991,7 @@ const Pages: React.FC = () => {
             group={group}
             language={language}
             onNavigate={navigate}
+            onRefresh={fetchAndGroup}
             defaultOpen={idx === 0 || tldGroups.length <= 3}
           />
         ))}

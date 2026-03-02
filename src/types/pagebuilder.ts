@@ -134,7 +134,15 @@ export interface PageRecord {
 export interface SchemaFieldDefinition {
   name: string;
   type: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'ContentBlock[]';
+  /** Help text shown below the field in the Page Builder */
   description?: string;
+  /** Input placeholder shown inside the input in the Page Builder */
+  placeholder?: string;
+  /**
+   * Developer / LLM context about the intended function and design of this field.
+   * NOT rendered in the Page Builder — exposed only via the schema API and spec.txt.
+   */
+  meta_description?: string;
   required?: boolean;
   properties?: SchemaFieldDefinition[];
   items?: SchemaFieldDefinition;

@@ -26,6 +26,8 @@ const emptyField = (): SchemaFieldDefinition => ({
   name: '',
   type: 'string',
   description: '',
+  placeholder: '',
+  meta_description: '',
   required: false,
 });
 
@@ -37,6 +39,9 @@ const fieldsToJsonSchema = (fields: SchemaFieldDefinition[]): Record<string, unk
     const entry: Record<string, unknown> = {
       type: field.type,
       description: field.description || undefined,
+      placeholder: field.placeholder || undefined,
+      meta_description: field.meta_description || undefined,
+      required: field.required || undefined,
     };
 
     if (field.enum && field.enum.length > 0) {
@@ -70,7 +75,9 @@ const jsonSchemaToFields = (schema: Record<string, unknown>): SchemaFieldDefinit
       name,
       type: (entry.type as SchemaFieldDefinition['type']) || 'string',
       description: (entry.description as string) || '',
-      required: false,
+      placeholder: (entry.placeholder as string) || '',
+      meta_description: (entry.meta_description as string) || '',
+      required: (entry.required as boolean) || false,
     };
 
     if (entry.enum) {
@@ -112,44 +119,68 @@ const FieldEditor: React.FC<FieldEditorProps> = ({ field, onChange, onRemove, de
   return (
     <div className={`border rounded-lg p-3 space-y-3 ${depth > 0 ? 'ml-6 border-dashed' : ''}`}>
       <div className="flex items-start gap-2">
-        <div className="flex-1 grid grid-cols-3 gap-2">
+        <div className="flex-1 space-y-2">
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <Label className="text-xs text-muted-foreground">Name</Label>
+              <Input
+                value={field.name}
+                onChange={(e) => onChange({ ...field, name: e.target.value })}
+                placeholder="field_name"
+                className="h-8 text-sm font-mono"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">Type</Label>
+              <Select
+                value={field.type}
+                onValueChange={(value) => onChange({
+                  ...field,
+                  type: value as SchemaFieldDefinition['type'],
+                  properties: value === 'object' ? field.properties || [] : undefined,
+                  items: value === 'array' ? field.items || emptyField() : undefined,
+                })}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FIELD_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">Help Text (PageBuilder)</Label>
+              <Input
+                value={field.description || ''}
+                onChange={(e) => onChange({ ...field, description: e.target.value })}
+                placeholder="Displayed below the field"
+                className="h-8 text-sm"
+              />
+            </div>
+          </div>
           <div>
-            <Label className="text-xs text-muted-foreground">Name</Label>
+            <Label className="text-xs text-muted-foreground">Placeholder (PageBuilder)</Label>
             <Input
-              value={field.name}
-              onChange={(e) => onChange({ ...field, name: e.target.value })}
-              placeholder="field_name"
+              value={field.placeholder || ''}
+              onChange={(e) => onChange({ ...field, placeholder: e.target.value })}
+              placeholder="e.g. Enter title..."
               className="h-8 text-sm"
             />
           </div>
-          <div>
-            <Label className="text-xs text-muted-foreground">Typ</Label>
-            <Select
-              value={field.type}
-              onValueChange={(value) => onChange({
-                ...field,
-                type: value as SchemaFieldDefinition['type'],
-                properties: value === 'object' ? field.properties || [] : undefined,
-                items: value === 'array' ? field.items || emptyField() : undefined,
-              })}
-            >
-              <SelectTrigger className="h-8 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {FIELD_TYPES.map((type) => (
-                  <SelectItem key={type} value={type}>{type}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs text-muted-foreground">Beschreibung</Label>
-            <Input
-              value={field.description || ''}
-              onChange={(e) => onChange({ ...field, description: e.target.value })}
-              placeholder="Field description"
-              className="h-8 text-sm"
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground flex items-center gap-1">
+              <span>Meta Description</span>
+              <span className="font-normal">(Fetched via API)</span>
+            </Label>
+            <Textarea
+              value={field.meta_description || ''}
+              onChange={(e) => onChange({ ...field, meta_description: e.target.value })}
+              placeholder="Purpose, design intent, and notes for developers or AI agents..."
+              className="text-sm min-h-[56px] resize-y"
+              rows={2}
             />
           </div>
         </div>
@@ -187,7 +218,7 @@ const FieldEditor: React.FC<FieldEditorProps> = ({ field, onChange, onRemove, de
                 properties: [...(field.properties || []), emptyField()],
               })}
             >
-              <Plus className="h-3 w-3 mr-1" /> Feld
+              <Plus className="h-3 w-3 mr-1" /> Field
             </Button>
           </div>
           {(field.properties || []).map((prop, i) => (
