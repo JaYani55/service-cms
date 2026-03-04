@@ -8,6 +8,7 @@ import {
   ShieldAlert,
   KeyRound,
   Database,
+  HardDrive,
   Plus,
   Pencil,
   Trash2,
@@ -19,6 +20,9 @@ import {
   AlertTriangle,
   Info,
   Unplug,
+  CheckCircle2,
+  XCircle,
+  FlaskConical,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,9 +56,12 @@ import {
   listSecrets,
   upsertSecret,
   deleteSecret,
+  getMediaConfig,
+  testMediaConnection,
   SECRETS_MANIFEST,
   type CfSecret,
   type SecretDefinition,
+  type MediaConfig,
 } from '@/services/connectionsService';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -75,6 +82,7 @@ interface EditState {
 
 function CategoryIcon({ category }: { category: string }) {
   if (category === 'Database') return <Database className="h-4 w-4" />;
+  if (category === 'Storage') return <HardDrive className="h-4 w-4" />;
   return <KeyRound className="h-4 w-4" />;
 }
 
@@ -123,6 +131,11 @@ const VerwaltungConnections: React.FC = () => {
   const [cfSecrets, setCfSecrets] = useState<CfSecret[]>([]);
   const [apiError, setApiError] = useState<string | null>(null);
 
+  // Media storage live status
+  const [mediaConfig, setMediaConfig] = useState<MediaConfig | null>(null);
+  const [mediaTesting, setMediaTesting] = useState(false);
+  const [mediaTestResult, setMediaTestResult] = useState<{ ok: boolean; itemCount?: number; error?: string } | null>(null);
+
   // Edit dialog state
   const [editState, setEditState] = useState<EditState | null>(null);
 
@@ -157,9 +170,19 @@ const VerwaltungConnections: React.FC = () => {
     }
   }, []);
 
+  const loadMediaStatus = useCallback(async () => {
+    try {
+      const cfg = await getMediaConfig();
+      setMediaConfig(cfg);
+    } catch {
+      setMediaConfig(null);
+    }
+  }, []);
+
   useEffect(() => {
     loadSecrets();
-  }, [loadSecrets]);
+    loadMediaStatus();
+  }, [loadSecrets, loadMediaStatus]);
 
   // Build merged list: manifest entry + CF status
   const secretsWithStatus: SecretWithStatus[] = SECRETS_MANIFEST.map((def) => ({
@@ -335,6 +358,8 @@ const VerwaltungConnections: React.FC = () => {
                 <CardDescription>
                   {category === 'Database'
                     ? 'Your own Supabase database credentials (BYODB). Stored securely in Cloudflare Secrets Store and injected into the Worker at runtime.'
+                    : category === 'Storage'
+                    ? 'Media storage configuration. Set STORAGE_PROVIDER to "supabase" or "r2" to activate the media library. See the connection test below after saving.'
                     : 'API keys and tokens used by the Worker.'}
                 </CardDescription>
               </CardHeader>
@@ -396,6 +421,118 @@ const VerwaltungConnections: React.FC = () => {
             </Card>
           );
         })}
+
+        {/* ── Media Storage connection test ── */}
+        <Card className="border-dashed">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <HardDrive className="h-4 w-4" />
+              Media Storage — Connection Test
+            </CardTitle>
+            <CardDescription>
+              Live status of the configured media storage provider. Save your Storage secrets above, then click Test to verify the connection.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* ── Provider status ── */}
+            <div className="flex items-center gap-3">
+              <div className="text-sm font-medium w-28 shrink-0">Provider</div>
+              {mediaConfig ? (
+                <Badge
+                  variant="outline"
+                  className={
+                    mediaConfig.provider === 'unconfigured'
+                      ? 'text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/30'
+                      : 'text-green-600 border-green-300 bg-green-50 dark:bg-green-950/30'
+                  }
+                >
+                  {mediaConfig.provider === 'supabase' && '⚡ Supabase Storage'}
+                  {mediaConfig.provider === 'r2' && '☁️ Cloudflare R2'}
+                  {mediaConfig.provider === 'unconfigured' && 'Not configured'}
+                </Badge>
+              ) : (
+                <span className="text-xs text-muted-foreground">Loading…</span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-sm font-medium w-28 shrink-0">Bucket</div>
+              <span className="text-sm font-mono text-muted-foreground">
+                {mediaConfig?.bucket ?? '—'}
+              </span>
+            </div>
+            {mediaConfig?.provider === 'r2' && (
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-medium w-28 shrink-0">Public URL</div>
+                <Badge
+                  variant="outline"
+                  className={
+                    mediaConfig.publicUrlConfigured
+                      ? 'text-green-600 border-green-300 bg-green-50 dark:bg-green-950/30'
+                      : 'text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/30'
+                  }
+                >
+                  {mediaConfig.publicUrlConfigured ? 'Configured' : 'Not set'}
+                </Badge>
+              </div>
+            )}
+            {mediaConfig?.provider === 'r2' && !mediaConfig.configured && (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  R2 bucket binding (<code>MEDIA_BUCKET</code>) is not bound. Enable the
+                  <code>r2_buckets</code> section in <code>wrangler.jsonc</code> and redeploy.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* ── Test result ── */}
+            {mediaTestResult && (
+              <div className={`flex items-center gap-2 text-sm rounded-md px-3 py-2 ${
+                mediaTestResult.ok
+                  ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400'
+                  : 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400'
+              }`}>
+                {mediaTestResult.ok
+                  ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  : <XCircle className="h-4 w-4 shrink-0" />}
+                <span>
+                  {mediaTestResult.ok
+                    ? `Connection OK — ${mediaTestResult.itemCount} item(s) at root`
+                    : `Connection failed: ${mediaTestResult.error}`}
+                </span>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={loadMediaStatus}
+                disabled={mediaTesting}
+              >
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                Reload Config
+              </Button>
+              <Button
+                size="sm"
+                disabled={mediaTesting || !mediaConfig?.configured}
+                onClick={async () => {
+                  setMediaTesting(true);
+                  setMediaTestResult(null);
+                  const result = await testMediaConnection();
+                  setMediaTestResult(result);
+                  setMediaTesting(false);
+                }}
+              >
+                {mediaTesting ? (
+                  <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Testing…</>
+                ) : (
+                  <><FlaskConical className="h-3.5 w-3.5 mr-1.5" />Test Connection</>
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* ── Extra / custom secrets in the store ── */}
         {(extraCfSecrets.length > 0 || true) && (

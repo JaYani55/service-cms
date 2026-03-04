@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { fileUploadClient } from '@/lib/fileUploadClient';
 import { Button } from '@/components/ui/button';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -24,22 +25,24 @@ import {
 interface ImageUploaderProps {
   value?: string;
   onChange: (url: string) => void;
+  /** @deprecated — storage is now configured server-side via Connections settings */
   bucket?: string;
+  /** @deprecated — upload folder is now the current media browser path */
   folder?: string;
 }
 
 interface MediaItem {
   name: string;
+  path: string;
   url: string;
-  created_at: string;
-  isFolder?: boolean;
+  isFolder: boolean;
+  size?: number;
+  createdAt?: string;
 }
 
 export const ImageUploader: React.FC<ImageUploaderProps> = ({
   value,
   onChange,
-  bucket = 'booking_media',
-  folder = 'product-images',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -59,57 +62,20 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   const loadMediaLibrary = useCallback(async (path: string = '') => {
     setLoadingMedia(true);
     try {
-      console.log('Loading media from path:', path || 'root');
-      const { data, error } = await fileUploadClient.storage
-        .from(bucket)
-        .list(path, {
-          limit: 100,
-          sortBy: { column: 'created_at', order: 'desc' },
-        });
-
-      if (error) throw error;
-
-      console.log('Raw storage data:', data);
-
-      const items: MediaItem[] = await Promise.all(
-        (data || []).map(async (file) => {
-          // Check if it's a folder - folders have no id or metadata in Supabase storage
-          const isFolder = !file.id || file.metadata === null;
-          
-          if (isFolder) {
-            return {
-              name: file.name,
-              url: '',
-              created_at: file.created_at || '',
-              isFolder: true,
-            };
-          }
-
-          // It's a file, get the public URL
-          const filePath = path ? `${path}/${file.name}` : file.name;
-          const { data: urlData } = fileUploadClient.storage
-            .from(bucket)
-            .getPublicUrl(filePath);
-          
-          return {
-            name: file.name,
-            url: urlData.publicUrl,
-            created_at: file.created_at || '',
-            isFolder: false,
-          };
-        })
-      );
-
-      console.log('Processed media items:', items);
-      setMediaItems(items);
+      const res = await fetch(`${API_URL}/api/media/list?path=${encodeURIComponent(path)}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json() as { items: MediaItem[] };
+      setMediaItems(data.items ?? []);
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       toast.error(`Fehler beim Laden der Medien: ${message}`);
-      console.error('Media loading error:', error);
     } finally {
       setLoadingMedia(false);
     }
-  }, [bucket]);
+  }, []);
 
   const handleFolderClick = (folderName: string) => {
     const newPath = currentPath ? `${currentPath}/${folderName}` : folderName;
@@ -132,18 +98,19 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     }
 
     try {
-      // Create a placeholder file to create the folder structure
       const folderPath = currentPath ? `${currentPath}/${newFolderName}` : newFolderName;
       const placeholderPath = `${folderPath}/.placeholder`;
-      
-      const { error } = await fileUploadClient.storage
-        .from(bucket)
-        .upload(placeholderPath, new Blob([''], { type: 'text/plain' }), {
-          cacheControl: '3600',
-          upsert: false,
-        });
+      const formData = new FormData();
+      formData.append('file', new File([''], '.placeholder', { type: 'text/plain' }));
+      formData.append('path', folderPath);
 
-      if (error) throw error;
+      const res = await fetch(`${API_URL}/api/media/upload`, { method: 'POST', body: formData });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      // If .placeholder already exists we also treat that as success
+      void placeholderPath; // silence unused var
 
       toast.success(`Ordner "${newFolderName}" erfolgreich erstellt`);
       setNewFolderName('');
@@ -165,42 +132,29 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
 
     try {
       if (itemToDelete.isFolder) {
-        // Delete folder: list all files in folder and delete them
-        const folderPath = currentPath ? `${currentPath}/${itemToDelete.name}` : itemToDelete.name;
-        const { data: files, error: listError } = await fileUploadClient.storage
-          .from(bucket)
-          .list(folderPath, {
-            limit: 1000,
-          });
-
-        if (listError) throw listError;
-
-        // Delete all files in the folder
-        if (files && files.length > 0) {
-          const filePaths = files.map(file => `${folderPath}/${file.name}`);
-          const { error: deleteError } = await fileUploadClient.storage
-            .from(bucket)
-            .remove(filePaths);
-
-          if (deleteError) throw deleteError;
+        // List all files inside the folder, then delete them one-by-one via the API
+        const folderPath = itemToDelete.path;
+        const listRes = await fetch(`${API_URL}/api/media/list?path=${encodeURIComponent(folderPath)}`);
+        if (listRes.ok) {
+          const listData = await listRes.json() as { items: MediaItem[] };
+          for (const child of listData.items) {
+            if (!child.isFolder) {
+              await fetch(`${API_URL}/api/media/file?path=${encodeURIComponent(child.path)}`, { method: 'DELETE' });
+            }
+          }
         }
-
         toast.success(`Ordner "${itemToDelete.name}" erfolgreich gelöscht`);
       } else {
-        // Delete single file
-        const filePath = currentPath ? `${currentPath}/${itemToDelete.name}` : itemToDelete.name;
-        const { error } = await fileUploadClient.storage
-          .from(bucket)
-          .remove([filePath]);
-
-        if (error) throw error;
-
-        toast.success(`Bild "${itemToDelete.name}" erfolgreich gelöscht`);
-        
-        // Clear selection if deleted image was selected
-        if (selectedImage === itemToDelete.url) {
-          setSelectedImage(null);
+        const res = await fetch(
+          `${API_URL}/api/media/file?path=${encodeURIComponent(itemToDelete.path)}`,
+          { method: 'DELETE' },
+        );
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
+          throw new Error(err.error ?? `HTTP ${res.status}`);
         }
+        toast.success(`Bild "${itemToDelete.name}" erfolgreich gelöscht`);
+        if (selectedImage === itemToDelete.url) setSelectedImage(null);
       }
 
       setShowDeleteDialog(false);
@@ -218,41 +172,26 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     setUploading(true);
 
     try {
-      // Generate unique filename
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      // Always upload to the default folder (product-images)
-      const uploadPath = folder ? `${folder}/${fileName}` : fileName;
+      const formData = new FormData();
+      formData.append('file', file);
+      if (currentPath) formData.append('path', currentPath);
 
-      const { error: uploadError } = await fileUploadClient.storage
-        .from(bucket)
-        .upload(uploadPath, file, {
-          cacheControl: '3600',
-          upsert: false,
-        });
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = fileUploadClient.storage
-        .from(bucket)
-        .getPublicUrl(uploadPath);
-
-      setSelectedImage(urlData.publicUrl);
-      toast.success('Bild erfolgreich hochgeladen!');
-      
-      // Navigate to the folder where we uploaded
-      if (folder && currentPath !== folder) {
-        setCurrentPath(folder);
-        setPathHistory([]);
+      const res = await fetch(`${API_URL}/api/media/upload`, { method: 'POST', body: formData });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
+        throw new Error(err.error ?? `HTTP ${res.status}`);
       }
-      // Reload media library at current location
-      await loadMediaLibrary(folder || currentPath);
+      const result = await res.json() as { url: string; path: string };
+
+      setSelectedImage(result.url);
+      toast.success('Bild erfolgreich hochgeladen!');
+      await loadMediaLibrary(currentPath);
     } catch (error: unknown) {
       toast.error(`Upload fehlgeschlagen: ${getErrorMessage(error)}`);
     } finally {
       setUploading(false);
     }
-  }, [bucket, folder, currentPath, loadMediaLibrary]);
+  }, [currentPath, loadMediaLibrary]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

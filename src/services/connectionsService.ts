@@ -24,7 +24,7 @@ export interface CfStore {
 // ── Known secrets manifest ──────────────────────────────────────────────────
 // Defines every secret the application knows about, grouped by category.
 
-export type SecretCategory = 'Database' | 'Worker' | 'Custom';
+export type SecretCategory = 'Database' | 'Storage' | 'Worker' | 'Custom';
 
 export interface SecretDefinition {
   name: string;
@@ -59,6 +59,34 @@ export const SECRETS_MANIFEST: SecretDefinition[] = [
     placeholder: 'eyJ...',
     binding: 'SS_SUPABASE_ANON_KEY',
   },
+  // ── Storage ───────────────────────────────────────────────────────────────
+  {
+    name: 'STORAGE_PROVIDER',
+    category: 'Storage',
+    label: 'Storage Provider',
+    description: 'Which object-storage backend to use for the media library. "supabase" uses Supabase Storage; "r2" uses a Cloudflare R2 bucket (must also be configured in wrangler.jsonc).',
+    required: true,
+    placeholder: 'supabase',
+    binding: 'SS_STORAGE_PROVIDER',
+  },
+  {
+    name: 'STORAGE_BUCKET',
+    category: 'Storage',
+    label: 'Storage Bucket',
+    description: 'Bucket / container name for media uploads. For Supabase Storage this is the bucket created in your Supabase dashboard. For R2 this must match the R2 bucket name in wrangler.jsonc.',
+    required: true,
+    placeholder: 'booking_media',
+    binding: 'SS_STORAGE_BUCKET',
+  },
+  {
+    name: 'R2_PUBLIC_URL',
+    category: 'Storage',
+    label: 'R2 Public URL',
+    description: 'Public CDN URL prefix for your R2 bucket (e.g. https://pub-xxx.r2.dev). Only required when STORAGE_PROVIDER is "r2".',
+    required: false,
+    placeholder: 'https://pub-<hash>.r2.dev',
+    binding: 'SS_R2_PUBLIC_URL',
+  },
 ];
 
 // ── API calls ────────────────────────────────────────────────────────────────
@@ -92,6 +120,38 @@ export async function upsertSecret(name: string, value: string, comment?: string
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Unknown error' })) as any;
     throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+}
+
+// ── Media config ─────────────────────────────────────────────────────────────
+
+export interface MediaConfig {
+  provider: 'supabase' | 'r2' | 'unconfigured';
+  bucket: string | null;
+  configured: boolean;
+  publicUrlConfigured?: boolean;
+}
+
+export async function getMediaConfig(): Promise<MediaConfig> {
+  const res = await fetch(`${API_URL}/api/media/config`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<MediaConfig>;
+}
+
+export async function testMediaConnection(): Promise<{ ok: boolean; itemCount?: number; error?: string }> {
+  try {
+    const res = await fetch(`${API_URL}/api/media/list?path=`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
+      return { ok: false, error: err.error ?? `HTTP ${res.status}` };
+    }
+    const data = await res.json() as { items: unknown[] };
+    return { ok: true, itemCount: data.items?.length ?? 0 };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Unknown error' };
   }
 }
 
