@@ -54,14 +54,18 @@ function run(cmd) {
   }
 }
 
+// On Windows the .bin shim is a bash script — use the .cmd wrapper instead.
+const IS_WIN    = process.platform === 'win32';
+const WRANGLER  = IS_WIN ? 'node_modules\.bin\wrangler.cmd' : 'node_modules/.bin/wrangler';
+
 /**
  * Run a wrangler command with fully inherited stdio (interactive).
  */
 function wranglerInteractive(...args) {
-  const result = spawnSync('node', ['node_modules/.bin/wrangler', ...args], {
+  const result = spawnSync(WRANGLER, args, {
     cwd: ROOT,
     stdio: 'inherit',
-    shell: false,
+    shell: IS_WIN, // shell required for .cmd files on Windows
   });
   return result.status === 0;
 }
@@ -72,8 +76,8 @@ function wranglerInteractive(...args) {
 function wranglerSilent(...args) {
   try {
     return execSync(
-      `node node_modules/.bin/wrangler ${args.join(' ')}`,
-      { encoding: 'utf8', cwd: ROOT, stdio: ['pipe', 'pipe', 'pipe'] },
+      `"${WRANGLER}" ${args.join(' ')}`,
+      { encoding: 'utf8', cwd: ROOT, stdio: ['pipe', 'pipe', 'pipe'], shell: IS_WIN },
     ).trim();
   } catch {
     return null;
