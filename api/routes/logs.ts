@@ -5,7 +5,7 @@ const logs = new Hono<{ Bindings: Env }>();
 
 // GET /api/schemas/logs — List log entries (paginated, filterable)
 logs.get('/', async (c) => {
-  const supabase = createSupabaseClient(c.env);
+  const supabase = await createSupabaseClient(c.env);
 
   const page = parseInt(c.req.query('page') || '1', 10);
   const limit = Math.min(parseInt(c.req.query('limit') || '50', 10), 200);
@@ -46,7 +46,7 @@ logs.get('/', async (c) => {
 
 // GET /api/schemas/logs/stats — Aggregate stats for dashboard
 logs.get('/stats', async (c) => {
-  const supabase = createSupabaseClient(c.env);
+  const supabase = await createSupabaseClient(c.env);
 
   // Total logs
   const { count: total } = await supabase
@@ -84,7 +84,7 @@ logs.get('/stats', async (c) => {
 
 // GET /api/schemas/logs/download — Download logs as JSON file
 logs.get('/download', async (c) => {
-  const supabase = createSupabaseClient(c.env);
+  const supabase = await createSupabaseClient(c.env);
   const schemaSlug = c.req.query('schema_slug') || null;
   const from = c.req.query('from') || null;
   const to = c.req.query('to') || null;
@@ -118,7 +118,7 @@ logs.get('/download', async (c) => {
 
 // DELETE /api/schemas/logs — Clear all logs (or by filter)
 logs.delete('/', async (c) => {
-  const supabase = createSupabaseClient(c.env);
+  const supabase = await createSupabaseClient(c.env);
   const schemaSlug = c.req.query('schema_slug') || null;
   const before = c.req.query('before') || null; // ISO date — delete logs older than this
 
@@ -149,7 +149,7 @@ logs.delete('/', async (c) => {
 // DELETE /api/schemas/logs/:id — Delete a single log entry
 logs.delete('/:id', async (c) => {
   const id = c.req.param('id');
-  const supabase = createSupabaseClient(c.env);
+  const supabase = await createSupabaseClient(c.env);
 
   const { error } = await supabase
     .from('agent_logs')

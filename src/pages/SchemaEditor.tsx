@@ -20,7 +20,7 @@ import type { SchemaFieldDefinition, PageSchema } from '@/types/pagebuilder';
 import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
 
-const FIELD_TYPES = ['string', 'number', 'boolean', 'array', 'object', 'ContentBlock[]'] as const;
+const FIELD_TYPES = ['string', 'number', 'boolean', 'array', 'object', 'ContentBlock[]', 'media'] as const;
 
 const emptyField = (): SchemaFieldDefinition => ({
   name: '',

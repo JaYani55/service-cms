@@ -1,0 +1,660 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  ArrowLeft,
+  RefreshCw,
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  KeyRound,
+  Database,
+  Plus,
+  Pencil,
+  Trash2,
+  Eye,
+  EyeOff,
+  Loader2,
+  Copy,
+  Check,
+  AlertTriangle,
+  Info,
+  Unplug,
+} from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
+import { usePermissions } from '@/hooks/usePermissions';
+import {
+  listSecrets,
+  upsertSecret,
+  deleteSecret,
+  SECRETS_MANIFEST,
+  type CfSecret,
+  type SecretDefinition,
+} from '@/services/connectionsService';
+
+// ─── Types ─────────────────────────────────────────────────────────────────
+
+interface SecretWithStatus extends SecretDefinition {
+  cfSecret: CfSecret | null; // null = not yet stored in CF
+}
+
+interface EditState {
+  secret: SecretWithStatus;
+  value: string;
+  comment: string;
+  showValue: boolean;
+  saving: boolean;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+function CategoryIcon({ category }: { category: string }) {
+  if (category === 'Database') return <Database className="h-4 w-4" />;
+  return <KeyRound className="h-4 w-4" />;
+}
+
+function StatusBadge({ secret }: { secret: SecretWithStatus }) {
+  if (!secret.cfSecret) {
+    return (
+      <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/30 gap-1">
+        <ShieldAlert className="h-3 w-3" />
+        Not configured
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50 dark:bg-green-950/30 gap-1">
+      <ShieldCheck className="h-3 w-3" />
+      Configured
+    </Badge>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <button
+      onClick={copy}
+      className="ml-1 text-muted-foreground hover:text-foreground transition-colors"
+      title="Copy"
+    >
+      {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+    </button>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────
+
+const VerwaltungConnections: React.FC = () => {
+  const navigate = useNavigate();
+  const permissions = usePermissions();
+
+  const [loading, setLoading] = useState(true);
+  const [cfSecrets, setCfSecrets] = useState<CfSecret[]>([]);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  // Edit dialog state
+  const [editState, setEditState] = useState<EditState | null>(null);
+
+  // Delete confirm
+  const [deleteTarget, setDeleteTarget] = useState<SecretWithStatus | null>(null);
+
+  // Custom secret creation
+  const [addCustomOpen, setAddCustomOpen] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customValue, setCustomValue] = useState('');
+  const [customComment, setCustomComment] = useState('');
+  const [customShowValue, setCustomShowValue] = useState(false);
+  const [customSaving, setCustomSaving] = useState(false);
+
+  // Redirect if insufficient permissions
+  useEffect(() => {
+    if (!permissions.canManageAccounts) {
+      navigate('/verwaltung');
+    }
+  }, [permissions.canManageAccounts, navigate]);
+
+  const loadSecrets = useCallback(async () => {
+    setLoading(true);
+    setApiError(null);
+    try {
+      const data = await listSecrets();
+      setCfSecrets(data);
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to load secrets from Cloudflare');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSecrets();
+  }, [loadSecrets]);
+
+  // Build merged list: manifest entry + CF status
+  const secretsWithStatus: SecretWithStatus[] = SECRETS_MANIFEST.map((def) => ({
+    ...def,
+    cfSecret: cfSecrets.find((s) => s.name === def.name) ?? null,
+  }));
+
+  // Group by category
+  const categories = Array.from(new Set(SECRETS_MANIFEST.map((s) => s.category)));
+
+  // ── Edit handlers ──────────────────────────────────────────────────────
+
+  const openEdit = (secret: SecretWithStatus) => {
+    setEditState({
+      secret,
+      value: '',
+      comment: secret.cfSecret?.comment ?? '',
+      showValue: false,
+      saving: false,
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editState) return;
+    if (!editState.value.trim()) {
+      toast.error('Value cannot be empty');
+      return;
+    }
+    setEditState((s) => s && { ...s, saving: true });
+    try {
+      await upsertSecret(editState.secret.name, editState.value, editState.comment);
+      toast.success(`Secret "${editState.secret.name}" saved successfully`);
+      setEditState(null);
+      await loadSecrets();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save secret');
+      setEditState((s) => s && { ...s, saving: false });
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteSecret(deleteTarget.name);
+      toast.success(`Secret "${deleteTarget.name}" deleted`);
+      setDeleteTarget(null);
+      await loadSecrets();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete secret');
+      setDeleteTarget(null);
+    }
+  };
+
+  // ── Custom secret handlers ────────────────────────────────────────────
+
+  const saveCustom = async () => {
+    if (!customName.trim() || !customValue.trim()) {
+      toast.error('Name and value are required');
+      return;
+    }
+    if (/\s/.test(customName)) {
+      toast.error('Secret name cannot contain spaces');
+      return;
+    }
+    setCustomSaving(true);
+    try {
+      await upsertSecret(customName.toUpperCase().replace(/[^A-Z0-9_]/g, '_'), customValue, customComment);
+      toast.success(`Secret "${customName}" saved`);
+      setAddCustomOpen(false);
+      setCustomName('');
+      setCustomValue('');
+      setCustomComment('');
+      await loadSecrets();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save secret');
+    } finally {
+      setCustomSaving(false);
+    }
+  };
+
+  // Extra CF secrets not in the manifest
+  const extraCfSecrets = cfSecrets.filter(
+    (s) => !SECRETS_MANIFEST.some((m) => m.name === s.name),
+  );
+
+  // ── Summary stats ───────────────────────────────────────────────────────
+
+  const configuredCount = secretsWithStatus.filter((s) => s.cfSecret !== null).length;
+  const requiredCount = secretsWithStatus.filter((s) => s.required).length;
+  const requiredConfigured = secretsWithStatus.filter((s) => s.required && s.cfSecret !== null).length;
+  const allRequiredDone = requiredConfigured === requiredCount;
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+        {/* ── Header ── */}
+        <div className="flex items-start gap-4">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/verwaltung')} className="mt-1">
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Zurück
+          </Button>
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-slate-700 to-slate-900 flex items-center justify-center shadow">
+                <Unplug className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Connections</h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  BYODB / BYOK — manage secrets stored in Cloudflare Secrets Store
+                </p>
+              </div>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={loadSecrets} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
+
+        {/* ── API Error banner ── */}
+        {apiError && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Could not reach Cloudflare API:</strong> {apiError}
+              <br />
+              <span className="text-xs mt-1 block opacity-80">
+                Make sure the Worker is deployed and <code>CF_API_TOKEN</code>, <code>CF_ACCOUNT_ID</code>,
+                and <code>SECRETS_STORE_ID</code> are all configured in <code>wrangler.jsonc</code>.
+              </span>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* ── Status summary ── */}
+        {!apiError && (
+          <div className="grid grid-cols-3 gap-4">
+            <Card>
+              <CardContent className="pt-5 pb-4">
+                <div className="text-2xl font-bold">{configuredCount} / {secretsWithStatus.length}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Secrets configured</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5 pb-4">
+                <div className={`text-2xl font-bold ${allRequiredDone ? 'text-green-600' : 'text-amber-500'}`}>
+                  {requiredConfigured} / {requiredCount}
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">Required secrets</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5 pb-4">
+                <div className="text-2xl font-bold">{cfSecrets.length}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Total in store</div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* ── Manifest secrets (grouped by category) ── */}
+        {categories.map((category) => {
+          const items = secretsWithStatus.filter((s) => s.category === category);
+          return (
+            <Card key={category}>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CategoryIcon category={category} />
+                  {category}
+                </CardTitle>
+                <CardDescription>
+                  {category === 'Database'
+                    ? 'Your own Supabase database credentials (BYODB). Stored securely in Cloudflare Secrets Store and injected into the Worker at runtime.'
+                    : 'API keys and tokens used by the Worker.'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {items.map((s, idx) => (
+                  <React.Fragment key={s.name}>
+                    {idx > 0 && <Separator />}
+                    <div className="flex items-start justify-between gap-4 py-1">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-sm font-semibold">{s.name}</span>
+                          {s.required && (
+                            <Badge variant="secondary" className="text-[10px] h-4 px-1">Required</Badge>
+                          )}
+                          <StatusBadge secret={s} />
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">{s.description}</p>
+                        {s.binding && (
+                          <p className="text-xs text-muted-foreground/70 mt-0.5 font-mono">
+                            Binding: <span className="text-foreground/60">{s.binding}</span>
+                            <CopyButton text={s.binding} />
+                          </p>
+                        )}
+                        {s.cfSecret?.created_at && (
+                          <p className="text-xs text-muted-foreground/60 mt-0.5">
+                            Last updated: {new Date(s.cfSecret.updated_at ?? s.cfSecret.created_at).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          size="sm"
+                          variant={s.cfSecret ? 'outline' : 'default'}
+                          onClick={() => openEdit(s)}
+                          disabled={loading}
+                        >
+                          {s.cfSecret ? (
+                            <><Pencil className="h-3 w-3 mr-1" />Edit</>
+                          ) : (
+                            <><Shield className="h-3 w-3 mr-1" />Set</>
+                          )}
+                        </Button>
+                        {s.cfSecret && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setDeleteTarget(s)}
+                            disabled={loading}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </React.Fragment>
+                ))}
+              </CardContent>
+            </Card>
+          );
+        })}
+
+        {/* ── Extra / custom secrets in the store ── */}
+        {(extraCfSecrets.length > 0 || true) && (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <KeyRound className="h-4 w-4" />
+                    Custom Secrets
+                  </CardTitle>
+                  <CardDescription>
+                    Additional secrets stored in the store not part of the default manifest.
+                    Use these for third-party API keys, webhooks, or any BYOK credential.
+                  </CardDescription>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setAddCustomOpen(true)}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add secret
+                </Button>
+              </div>
+            </CardHeader>
+            {extraCfSecrets.length > 0 && (
+              <CardContent className="space-y-3">
+                {extraCfSecrets.map((s, idx) => (
+                  <React.Fragment key={s.id}>
+                    {idx > 0 && <Separator />}
+                    <div className="flex items-center justify-between gap-4 py-1">
+                      <div className="flex-1 min-w-0">
+                        <span className="font-mono text-sm font-semibold">{s.name}</span>
+                        {s.comment && (
+                          <p className="text-xs text-muted-foreground mt-0.5">{s.comment}</p>
+                        )}
+                        {s.created_at && (
+                          <p className="text-xs text-muted-foreground/60 mt-0.5">
+                            Last updated: {new Date(s.updated_at ?? s.created_at).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            openEdit({
+                              name: s.name,
+                              category: 'Custom',
+                              label: s.name,
+                              description: s.comment ?? '',
+                              required: false,
+                              cfSecret: s,
+                            })
+                          }
+                        >
+                          <Pencil className="h-3 w-3 mr-1" />Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() =>
+                            setDeleteTarget({
+                              name: s.name,
+                              category: 'Custom',
+                              label: s.name,
+                              description: '',
+                              required: false,
+                              cfSecret: s,
+                            })
+                          }
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </React.Fragment>
+                ))}
+              </CardContent>
+            )}
+            {extraCfSecrets.length === 0 && !loading && (
+              <CardContent>
+                <p className="text-sm text-muted-foreground">No custom secrets yet.</p>
+              </CardContent>
+            )}
+          </Card>
+        )}
+
+        {/* ── How it works ── */}
+        <Card className="border-dashed">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Info className="h-4 w-4" />
+              How it works
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-xs text-muted-foreground space-y-2">
+            <p>
+              Secrets are stored in your <strong>Cloudflare Secrets Store</strong> — encrypted at rest,
+              injected into the Worker at runtime via bindings declared in <code>wrangler.jsonc</code>.
+              Values are <strong>write-only</strong>: they can be set or deleted, but never read back through this UI.
+            </p>
+            <p>
+              To bind a new secret to the Worker, add an entry to <code>secrets_store_secrets</code> in
+              your <code>wrangler.jsonc</code> and redeploy. The management API (<code>/api/secrets</code>)
+              requires <code>CF_API_TOKEN</code> to be set as a Worker secret:
+            </p>
+            <pre className="bg-muted rounded p-2 text-[11px] overflow-x-auto">
+              npx wrangler secret put CF_API_TOKEN
+            </pre>
+          </CardContent>
+        </Card>
+
+      </div>
+
+      {/* ── Edit secret dialog ── */}
+      <Dialog open={editState !== null} onOpenChange={(open) => { if (!open) setEditState(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editState?.secret.cfSecret ? 'Update secret' : 'Set secret'}
+            </DialogTitle>
+            <DialogDescription>
+              <span className="font-mono font-semibold">{editState?.secret.name}</span>
+              {' — '}{editState?.secret.description}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Value</Label>
+              <div className="relative">
+                <Input
+                  type={editState?.showValue ? 'text' : 'password'}
+                  value={editState?.value ?? ''}
+                  onChange={(e) => setEditState((s) => s && { ...s, value: e.target.value })}
+                  placeholder={editState?.secret.placeholder ?? 'Enter secret value…'}
+                  className="pr-10 font-mono text-sm"
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setEditState((s) => s && { ...s, showValue: !s.showValue })}
+                >
+                  {editState?.showValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Existing value is never returned by the API. Enter the full new value to update.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Comment <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Input
+                value={editState?.comment ?? ''}
+                onChange={(e) => setEditState((s) => s && { ...s, comment: e.target.value })}
+                placeholder="e.g. Supabase project: my-app-prod"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditState(null)}>Cancel</Button>
+            <Button onClick={saveEdit} disabled={editState?.saving}>
+              {editState?.saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {editState?.secret.cfSecret ? 'Update' : 'Save secret'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add custom secret dialog ── */}
+      <Dialog open={addCustomOpen} onOpenChange={(open) => { if (!open) setAddCustomOpen(false); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add custom secret</DialogTitle>
+            <DialogDescription>
+              Store any additional API key or token. The name will be uppercased and sanitised automatically.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Secret name</Label>
+              <Input
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                placeholder="MY_API_KEY"
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground">Letters, numbers and underscores only. No spaces.</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Value</Label>
+              <div className="relative">
+                <Input
+                  type={customShowValue ? 'text' : 'password'}
+                  value={customValue}
+                  onChange={(e) => setCustomValue(e.target.value)}
+                  placeholder="Enter secret value…"
+                  className="pr-10 font-mono text-sm"
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setCustomShowValue((v) => !v)}
+                >
+                  {customShowValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Comment <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Input
+                value={customComment}
+                onChange={(e) => setCustomComment(e.target.value)}
+                placeholder="What is this key for?"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddCustomOpen(false)}>Cancel</Button>
+            <Button onClick={saveCustom} disabled={customSaving}>
+              {customSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Save secret
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete confirm ── */}
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete secret?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove <span className="font-mono font-semibold">{deleteTarget?.name}</span> from
+              the Cloudflare Secrets Store. Any Worker binding pointing to this secret will stop working until you
+              set a new value.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+};
+
+export default VerwaltungConnections;

@@ -6,7 +6,7 @@ const health = new Hono<{ Bindings: Env }>();
 // GET /api/schemas/:slug/health — Server-side domain health check
 health.get('/:slug/health', async (c) => {
   const slug = c.req.param('slug');
-  const supabase = createSupabaseClient(c.env);
+  const supabase = await createSupabaseClient(c.env);
 
   const { data: schema, error } = await supabase
     .from('page_schemas')

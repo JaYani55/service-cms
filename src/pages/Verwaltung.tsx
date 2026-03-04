@@ -12,7 +12,8 @@ import {
   Tags, 
   BarChart3, 
   Plus,
-  ShieldCheck
+  ShieldCheck,
+  Unplug
 } from 'lucide-react';
 import { AdminCard } from '@/components/admin/ui/AdminCard'; // Add this import
 
@@ -126,6 +127,16 @@ const Verwaltung = () => {
       href: '/verwaltung/accounts',
       permission: 'canManageAccounts',
       color: 'from-indigo-500 to-indigo-600',
+    },
+    {
+      title: 'Connections',
+      description: language === 'de'
+        ? 'BYODB / BYOK – Datenbankverbindungen und API-Schlüssel über Cloudflare Secrets Store verwalten'
+        : 'BYODB / BYOK – manage database credentials and API keys via Cloudflare Secrets Store',
+      icon: Unplug,
+      href: '/verwaltung/connections',
+      permission: 'canManageAccounts',
+      color: 'from-slate-600 to-slate-800',
     },
   ];
 

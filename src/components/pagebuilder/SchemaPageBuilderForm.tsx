@@ -25,6 +25,7 @@ import { toast } from 'sonner';
 import { savePage, triggerRevalidation } from '@/services/pageService';
 import type { PageSchema, SchemaFieldDefinition, ContentBlock } from '@/types/pagebuilder';
 import { StandaloneContentBlockEditor } from './StandaloneContentBlockEditor';
+import { ImageUploader } from './ImageUploader';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -93,7 +94,7 @@ const buildInitialData = (fields: SchemaFieldDefinition[]): Record<string, unkno
     else if (field.type === 'object') defaults[field.name] = {};
     else if (field.type === 'boolean') defaults[field.name] = false;
     else if (field.type === 'number') defaults[field.name] = 0;
-    else defaults[field.name] = '';
+    else defaults[field.name] = ''; // covers 'string' and 'media'
   }
   return defaults;
 };
@@ -167,6 +168,18 @@ const SchemaFieldRenderer: React.FC<SchemaFieldRendererProps> = ({
   onChange,
   depth = 0,
 }) => {
+  // media → ImageUploader
+  if (field.type === 'media') {
+    return (
+      <ImageUploader
+        value={(value as string) || ''}
+        onChange={(url) => onChange(url)}
+        bucket="booking_media"
+        folder="product-images"
+      />
+    );
+  }
+
   // ContentBlock[] → content blocks editor
   if (field.type === 'ContentBlock[]') {
     const blocks = Array.isArray(value) ? (value as ContentBlock[]) : [];

@@ -3,10 +3,58 @@
   "main": "api/index.ts",
   "compatibility_date": "2025-01-01",
   "compatibility_flags": ["nodejs_compat"],
-  // Environment variables — set via `wrangler secret put` or dashboard
-  // SUPABASE_URL: Your Supabase project URL
-  // SUPABASE_ANON_KEY: Supabase anon (public) key — RLS enforces access control
+
+  // ╔══════════════════════════════════════════════════════════════════════════╗
+  // ║                        FIRST-TIME SETUP                                 ║
+  // ║                                                                          ║
+  // ║  1. Find your Cloudflare Account ID:                                     ║
+  // ║     dash.cloudflare.com → any Zone → right sidebar → "Account ID"        ║
+  // ║     or: npx wrangler whoami                                              ║
+  // ║                                                                          ║
+  // ║  2. Create a Secrets Store (first time only):                            ║
+  // ║     npx wrangler secrets-store store create service-cms --remote         ║
+  // ║     Copy the returned store UUID.                                        ║
+  // ║     or: npx wrangler secrets-store store list                            ║
+  // ║                                                                          ║
+  // ║  3. Replace EVERY value marked  <<<  below.                              ║
+  // ║                                                                          ║
+  // ║  4. Set your CF API token (never stored in this file):                   ║
+  // ║     npx wrangler secret put CF_API_TOKEN                                 ║
+  // ║     Token needs:  Account → Secrets Store → Edit                         ║
+  // ║                                                                          ║
+  // ║  5. Add your Supabase secrets to the store:                              ║
+  // ║     npx wrangler secrets-store secret create <STORE_ID> \               ║
+  // ║       --name SUPABASE_URL --scopes workers --remote                      ║
+  // ║     npx wrangler secrets-store secret create <STORE_ID> \               ║
+  // ║       --name SUPABASE_ANON_KEY --scopes workers --remote                 ║
+  // ║     (or use the /verwaltung/connections UI after first deploy)           ║
+  // ╚══════════════════════════════════════════════════════════════════════════╝
+
   "vars": {
-    "ENVIRONMENT": "production"
-  }
+    "ENVIRONMENT": "production",
+
+    // <<< REPLACE: Your Cloudflare Account ID (see step 1 above)
+    "CF_ACCOUNT_ID": "REPLACE_WITH_YOUR_CF_ACCOUNT_ID",
+
+    // <<< REPLACE: Your Secrets Store UUID (see step 2 above)
+    "SECRETS_STORE_ID": "REPLACE_WITH_YOUR_SECRETS_STORE_ID"
+  },
+
+  "secrets_store_secrets": [
+    {
+      "binding": "SS_SUPABASE_URL",
+      // <<< REPLACE: Same Secrets Store UUID as SECRETS_STORE_ID above
+      "store_id": "REPLACE_WITH_YOUR_SECRETS_STORE_ID",
+      "secret_name": "SUPABASE_URL"
+    },
+    {
+      "binding": "SS_SUPABASE_ANON_KEY",
+      // <<< REPLACE: Same Secrets Store UUID as SECRETS_STORE_ID above
+      "store_id": "REPLACE_WITH_YOUR_SECRETS_STORE_ID",
+      "secret_name": "SUPABASE_ANON_KEY"
+    }
+  ]
+
+  // ── Worker secrets (CLI only — never commit these) ───────────────────────────
+  // CF_API_TOKEN  → npx wrangler secret put CF_API_TOKEN
 }

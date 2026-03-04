@@ -133,7 +133,7 @@ export interface PageRecord {
 
 export interface SchemaFieldDefinition {
   name: string;
-  type: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'ContentBlock[]';
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'ContentBlock[]' | 'media';
   /** Help text shown below the field in the Page Builder */
   description?: string;
   /** Input placeholder shown inside the input in the Page Builder */

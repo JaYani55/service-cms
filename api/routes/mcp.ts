@@ -10,13 +10,13 @@ const mcpRoute = new Hono<{ Bindings: Env }>();
 // Creates a fresh McpServer instance with all tools registered.
 // We need a factory because each connection needs its own server + transport.
 
-function createMcpServerWithTools(env: Env, baseUrl: string) {
+async function createMcpServerWithTools(env: Env, baseUrl: string) {
   const server = new McpServer({
     name: 'service-cms',
     version: '1.0.0',
   });
 
-  const supabase = createSupabaseClient(env);
+  const supabase = await createSupabaseClient(env);
 
   // ── Tool: list_schemas ──────────────────────────────────────────────────
   server.tool(
@@ -275,7 +275,7 @@ mcpRoute.all('/', async (c) => {
   }
 
   if (!mcpServer || !mcpServer.isConnected()) {
-    mcpServer = createMcpServerWithTools(c.env, baseUrl);
+    mcpServer = await createMcpServerWithTools(c.env, baseUrl);
     await mcpServer.connect(transport);
   }
 

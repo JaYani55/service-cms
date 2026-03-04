@@ -62,7 +62,7 @@ export const agentLogger: MiddlewareHandler<{ Bindings: Env }> = async (c, next)
 
   // Fire-and-forget: write the log entry
   try {
-    const supabase = createSupabaseClient(c.env);
+    const supabase = await createSupabaseClient(c.env);
 
     if (schemaSlug) {
       const { data } = await supabase

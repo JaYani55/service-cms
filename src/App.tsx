@@ -43,6 +43,7 @@ import VerwaltungCreateProduct from "./pages/VerwaltungCreateProduct";
 import VerwaltungMentorGroups from "./pages/VerwaltungMentorGroups";
 import VerwaltungMentorGiveTraits from "./pages/VerwaltungMentorGiveTraits";
 import VerwaltungAccounts from "./pages/VerwaltungAccounts";
+import VerwaltungConnections from "./pages/VerwaltungConnections";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -216,6 +217,7 @@ const AppContent = () => {
           {/* Verwaltung Routes */}
           <Route path="/verwaltung" element={<ProtectedRoute requiredRole="staff"><Verwaltung /></ProtectedRoute>} />
           <Route path="/verwaltung/accounts" element={<ProtectedRoute requiredRole="admin"><VerwaltungAccounts /></ProtectedRoute>} />
+          <Route path="/verwaltung/connections" element={<ProtectedRoute requiredRole="admin"><VerwaltungConnections /></ProtectedRoute>} />
           <Route path="/verwaltung/add-mentor" element={<ProtectedRoute requiredRole="staff"><VerwaltungAddMentor /></ProtectedRoute>} />
           <Route path="/verwaltung/all-mentors" element={<ProtectedRoute requiredRole="staff"><VerwaltungAllMentors /></ProtectedRoute>} />
           <Route path="/verwaltung/all-products" element={<ProtectedRoute requiredRole="staff"><VerwaltungAllProducts /></ProtectedRoute>} />

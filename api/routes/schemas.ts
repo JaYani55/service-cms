@@ -5,7 +5,7 @@ const schemas = new Hono<{ Bindings: Env }>();
 
 // GET /api/schemas — Discovery endpoint: list all available schemas
 schemas.get('/', async (c) => {
-  const supabase = createSupabaseClient(c.env);
+  const supabase = await createSupabaseClient(c.env);
 
   const { data, error } = await supabase
     .from('page_schemas')
@@ -41,7 +41,7 @@ schemas.get('/', async (c) => {
 // GET /api/schemas/:slug/spec.txt — LLM-ready plaintext schema specification
 schemas.get('/:slug/spec.txt', async (c) => {
   const slug = c.req.param('slug');
-  const supabase = createSupabaseClient(c.env);
+  const supabase = await createSupabaseClient(c.env);
 
   const { data: schema, error } = await supabase
     .from('page_schemas')
@@ -146,7 +146,7 @@ schemas.get('/:slug/spec.txt', async (c) => {
 // POST /api/schemas/:slug/register — Frontend registration callback
 schemas.post('/:slug/register', async (c) => {
   const slug = c.req.param('slug');
-  const supabase = createSupabaseClient(c.env);
+  const supabase = await createSupabaseClient(c.env);
 
   let body: {
     code: string;
@@ -216,7 +216,7 @@ schemas.post('/:slug/register', async (c) => {
 // POST /api/schemas/:slug/revalidate — Trigger ISR on the registered frontend
 schemas.post('/:slug/revalidate', async (c) => {
   const slug = c.req.param('slug');
-  const supabase = createSupabaseClient(c.env);
+  const supabase = await createSupabaseClient(c.env);
 
   let body: { page_slug: string };
   try {

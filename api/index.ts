@@ -6,6 +6,7 @@ import schemas from './routes/schemas';
 import health from './routes/health';
 import logs from './routes/logs';
 import mcpRoute from './routes/mcp';
+import secretsRoute from './routes/secrets';
 import { agentLogger } from './middleware/agentLogger';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -41,6 +42,7 @@ app.use('/mcp/*', agentLogger);
 app.route('/api/schemas/logs', logs);
 app.route('/api/schemas', schemas);
 app.route('/api/schemas', health);
+app.route('/api/secrets', secretsRoute);
 app.route('/mcp', mcpRoute);
 
 // 404 fallback
