@@ -194,7 +194,7 @@ async function createStore() {
   s.stop('');
 
   if (out) {
-    const match = out.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    const match = out.match(/[0-9a-f]{32}/i);
     if (match) {
       log.success(`Store created — ID: ${pc.bold(match[0])}`);
       return match[0];
@@ -210,10 +210,10 @@ async function createStore() {
 async function askStoreId() {
   return bailOnCancel(
     await text({
-      message: 'Secrets Store UUID:',
-      placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+      message: 'Secrets Store ID:',
+      placeholder: 'e.g. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
       validate: (v) =>
-        !/^[0-9a-f-]{36}$/i.test(v.trim()) ? 'Expected a UUID (32 hex chars + dashes).' : undefined,
+        v.trim().length < 8 ? 'Looks too short — paste the full Store ID.' : undefined,
     }),
   );
 }
