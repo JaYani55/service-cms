@@ -218,6 +218,109 @@ async function askStoreId() {
   );
 }
 
+async function putSecretsStoreSecret(storeId, name, value) {
+  const result = spawnSync(
+    'npx',
+    ['wrangler', 'secrets-store', 'secret', 'create', storeId,
+     '--name', name, '--scopes', 'workers', '--remote'],
+    {
+      input: value.trim() + '\n',
+      cwd: ROOT,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      shell: true,
+    },
+  );
+  return result.status === 0;
+}
+
+async function stepSupabaseSecrets(storeId) {
+  note(
+    [
+      'Find these values at:',
+      pc.cyan('  supabase.com/dashboard → your project → Settings → API'),
+    ].join('\n'),
+    'Supabase credentials',
+  );
+
+  const supabaseUrl = bailOnCancel(
+    await text({
+      message: 'SUPABASE_URL:',
+      placeholder: 'https://xxxxxxxxxxxx.supabase.co',
+      validate: (v) =>
+        !v.trim().startsWith('https://') ? 'Should start with https://' : undefined,
+    }),
+  );
+
+  const supabaseAnonKey = bailOnCancel(
+    await password({
+      message: 'SUPABASE_ANON_KEY (input hidden):',
+      validate: (v) =>
+        v.trim().length < 10 ? 'Key looks too short.' : undefined,
+    }),
+  );
+
+  const storageProvider = bailOnCancel(
+    await select({
+      message: 'Storage provider:',
+      options: [
+        { label: 'Supabase Storage  ' + pc.dim('(uses existing credentials)'), value: 'supabase' },
+        { label: 'Cloudflare R2', value: 'r2' },
+      ],
+    }),
+  );
+
+  const storageBucket = bailOnCancel(
+    await text({
+      message: 'Storage bucket name:',
+      placeholder: storageProvider === 'supabase' ? 'booking_media' : 'my-r2-bucket',
+      initialValue: storageProvider === 'supabase' ? 'booking_media' : '',
+    }),
+  );
+
+  let r2PublicUrl = '';
+  if (storageProvider === 'r2') {
+    r2PublicUrl = bailOnCancel(
+      await text({
+        message: 'R2 public URL:',
+        placeholder: 'https://pub-xxx.r2.dev',
+        validate: (v) =>
+          !v.trim().startsWith('https://') ? 'Should start with https://' : undefined,
+      }),
+    );
+  }
+
+  const secrets = [
+    { name: 'SUPABASE_URL',      value: supabaseUrl },
+    { name: 'SUPABASE_ANON_KEY', value: supabaseAnonKey },
+    { name: 'STORAGE_PROVIDER',  value: storageProvider },
+    { name: 'STORAGE_BUCKET',    value: storageBucket },
+    ...(storageProvider === 'r2' ? [{ name: 'R2_PUBLIC_URL', value: r2PublicUrl }] : []),
+  ];
+
+  const s = spinner();
+  for (const secret of secrets) {
+    s.start(`Storing ${pc.yellow(secret.name)} in Secrets Store…`);
+    const ok = await putSecretsStoreSecret(storeId, secret.name, secret.value);
+    if (ok) {
+      s.stop(pc.green(`${secret.name} stored ✓`));
+    } else {
+      s.stop(pc.yellow(`Warning: could not store ${secret.name} — set it manually via the /verwaltung/connections UI.`));
+    }
+  }
+
+  if (storageProvider === 'r2') {
+    note(
+      [
+        'You chose R2 as the storage provider.',
+        'Remember to uncomment the ' + pc.yellow('r2_buckets') + ' section in wrangler.jsonc',
+        'and replace the bucket name before deploying.',
+      ].join('\n'),
+      'R2 reminder',
+    );
+  }
+}
+
 function patchWranglerJsonc(accountId, storeId) {
   const path = join(ROOT, 'wrangler.jsonc');
   let txt = readFileSync(path, 'utf8');
@@ -344,7 +447,8 @@ async function main() {
       `  ${pc.cyan('2.')} Account ID  +  Secrets Store selection`,
       `  ${pc.cyan('3.')} Patch ${pc.yellow('wrangler.jsonc')} with your values`,
       `  ${pc.cyan('4.')} Set ${pc.yellow('CF_API_TOKEN')} as a Worker secret`,
-      `  ${pc.cyan('5.')} Build  →  Deploy`,
+      `  ${pc.cyan('5.')} Supabase URL  +  anon key  +  storage settings`,
+      `  ${pc.cyan('6.')} Build  →  Deploy`,
       '',
       pc.dim('You can re-run this wizard any time with  npm run setup'),
     ].join('\n'),
@@ -383,12 +487,16 @@ async function main() {
   log.step(pc.bold('Step 4 — CF_API_TOKEN'));
   await stepApiToken();
 
-  // ── 6. Build ──────────────────────────────────────────────────────────────
-  log.step(pc.bold('Step 5 — Build'));
+  // ── 6. Supabase + Storage credentials ────────────────────────────────────
+  log.step(pc.bold('Step 5 — Supabase & storage credentials'));
+  await stepSupabaseSecrets(storeId);
+
+  // ── 7. Build ──────────────────────────────────────────────────────────────
+  log.step(pc.bold('Step 6 — Build'));
   await stepBuild();
 
-  // ── 7. Deploy ─────────────────────────────────────────────────────────────
-  log.step(pc.bold('Step 6 — Deploy'));
+  // ── 8. Deploy ─────────────────────────────────────────────────────────────
+  log.step(pc.bold('Step 7 — Deploy'));
   await stepDeploy();
 
   // ── Done ──────────────────────────────────────────────────────────────────
@@ -396,12 +504,8 @@ async function main() {
     [
       pc.green(pc.bold('Setup complete!')),
       '',
-      pc.bold('Next steps after deploy:'),
-      `  → Open ${pc.cyan('/verwaltung/connections')} in your app`,
-      `  → Set ${pc.yellow('SUPABASE_URL')} and ${pc.yellow('SUPABASE_ANON_KEY')}`,
-      `  → Set ${pc.yellow('STORAGE_PROVIDER')} (${pc.dim('supabase')} or ${pc.dim('r2')}) and ${pc.yellow('STORAGE_BUCKET')}`,
-      '',
-      pc.dim('For R2: also uncomment r2_buckets in wrangler.jsonc and redeploy.'),
+      'All secrets have been stored in the Secrets Store.',
+      `You can update them any time via ${pc.cyan('/verwaltung/connections')} in your app.`,
     ].join('\n'),
   );
 }

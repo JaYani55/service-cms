@@ -1,0 +1,9 @@
+# Ensure shell scripts always use LF so they are executable on Linux/macOS
+*.sh   text eol=lf
+
+# Batch files stay CRLF on Windows checkout
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# Default: auto-detect text files, normalise to LF in the repo
+*      text=auto
