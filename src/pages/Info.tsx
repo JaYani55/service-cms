@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 import FAQ from '@/components/Info/FAQ';
-import Roleinfo from '@/components/Info/Roleinfo';
+import Legal from '@/components/Info/Legal';
 
 const Info = () => {
   const { language, theme } = useTheme();
@@ -45,13 +45,13 @@ const Info = () => {
 
           <button
             role="tab"
-            id="tab-roleinfo"
-            aria-controls="panel-roleinfo"
-            aria-selected={activeTab === 'roleinfo'}
-            onClick={() => setActiveTab('roleinfo')}
-            className={tabClasses('roleinfo')}
+            id="tab-legal"
+            aria-controls="panel-legal"
+            aria-selected={activeTab === 'legal'}
+            onClick={() => setActiveTab('legal')}
+            className={tabClasses('legal')}
           >
-            {language === 'en' ? 'Roles' : 'Rollen'}
+            Legal
           </button>
         </div>
 
@@ -66,12 +66,12 @@ const Info = () => {
         </div>
 
         <div
-          id="panel-roleinfo"
+          id="panel-legal"
           role="tabpanel"
-          aria-labelledby="tab-roleinfo"
-          hidden={activeTab !== 'roleinfo'}
+          aria-labelledby="tab-legal"
+          hidden={activeTab !== 'legal'}
         >
-          <Roleinfo />
+          <Legal />
         </div>
       </div>
     </main>
