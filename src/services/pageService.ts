@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import type { PageSchema, PageRecord, PageBuilderData, TLDGroup } from '@/types/pagebuilder';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
+import { API_URL } from '@/lib/apiUrl';
 
 // --- Slug Utilities ---
 

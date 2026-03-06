@@ -10,9 +10,11 @@
  *  3. Secrets Store     (list existing / create / enter manually)
  *  4. Patch wrangler.jsonc with the collected values
  *  5. CF_API_TOKEN      (wrangler secret put — stored in Workers secrets, not the file)
- *  6. Build             (npm run build)
- *  7. Deploy            (wrangler deploy)
- *  8. Next-steps outro  (Supabase / storage credentials via /verwaltung/connections UI)
+ *  6. Supabase + storage credentials (Worker secret, Secrets Store, wrangler.jsonc vars)
+ *  6b. Write .env with VITE_ vars so Vite bakes them into the frontend bundle
+ *  7. Apply database migrations via Supabase Management API
+ *  8. Build             (npm run build  — consumes .env)
+ *  9. Deploy            (wrangler deploy)
  */
 
 import {
@@ -389,6 +391,12 @@ async function stepSupabaseSecrets(storeId) {
     );
   }
 
+  // ── Write .env for Vite build-time substitution ────────────────────────
+  const ev = spinner();
+  ev.start('Writing .env with VITE_ vars for Vite build…');
+  writeEnvFile(supabaseUrl, supabasePublishableKey);
+  ev.stop(pc.green('.env written ✓  (VITE_SUPABASE_URL + VITE_SUPABASE_PUBLISHABLE_KEY)'));
+
   return { supabaseUrl, supabaseSecretKey, storageProvider, storageBucket, r2PublicUrl };
 }
 
@@ -415,6 +423,163 @@ function patchWranglerVars(supabaseUrl, storageProvider, storageBucket, r2Public
     txt = txt.replace('"R2_PUBLIC_URL":    ""', `"R2_PUBLIC_URL":    "${r2PublicUrl.trim()}"`);
   }
   writeFileSync(path, txt, 'utf8');
+}
+
+/**
+ * Step: register a first super-admin user directly via the Supabase Admin API.
+ * - Creates the auth user with email_confirm:true (no email verification).
+ * - Upserts the 'super-admin' role with app=["mentorbooking"].
+ * - Creates the user_profile row.
+ * - Assigns the role in user_roles.
+ */
+async function stepFirstAdmin(supabaseUrl, supabaseSecretKey) {
+  const skip = bailOnCancel(
+    await confirm({
+      message: 'Create a first super-admin account now?',
+      initialValue: true,
+    }),
+  );
+  if (!skip) {
+    log.info('Skipping first-admin setup — create a user manually after deploy.');
+    return;
+  }
+
+  const adminEmail = bailOnCancel(
+    await text({
+      message: 'Admin email:',
+      placeholder: 'admin@example.com',
+      validate: (v) => (!v.includes('@') ? 'Enter a valid email address.' : undefined),
+    }),
+  );
+
+  const adminPassword = bailOnCancel(
+    await password({
+      message: 'Admin password (min 8 chars, input hidden):',
+      validate: (v) => (v.trim().length < 8 ? 'Password must be at least 8 characters.' : undefined),
+    }),
+  );
+
+  const headers = {
+    apikey:          supabaseSecretKey.trim(),
+    Authorization:   `Bearer ${supabaseSecretKey.trim()}`,
+    'Content-Type':  'application/json',
+  };
+
+  // ── 1. Create auth user (email_confirm:true = no verification mail) ────────
+  const s1 = spinner();
+  s1.start('Creating auth user…');
+  const authRes = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+    method:  'POST',
+    headers,
+    body: JSON.stringify({
+      email:         adminEmail.trim(),
+      password:      adminPassword.trim(),
+      email_confirm: true,
+    }),
+  });
+
+  if (!authRes.ok) {
+    const body = await authRes.json().catch(() => ({}));
+    s1.stop(pc.red('Failed to create auth user.'));
+    log.warn(body.message || body.msg || JSON.stringify(body));
+    return;
+  }
+  const authUser = await authRes.json();
+  const userId   = authUser.id;
+  s1.stop(pc.green(`Auth user created ✓  (${pc.dim(userId)})`));
+
+  // ── 2. Upsert super-admin role ────────────────────────────────────────────
+  const s2 = spinner();
+  s2.start('Creating super-admin role…');
+  const roleInsertRes = await fetch(`${supabaseUrl}/rest/v1/roles`, {
+    method:  'POST',
+    headers: { ...headers, Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify({
+      name:        'super-admin',
+      description: 'Full system access',
+      app:         ['mentorbooking'],
+    }),
+  });
+
+  let roleId = null;
+  if (roleInsertRes.ok) {
+    const roleData = await roleInsertRes.json().catch(() => null);
+    roleId = Array.isArray(roleData) ? roleData[0]?.id : roleData?.id;
+  }
+
+  // Fall back to reading the existing row if the insert returned no ID
+  if (!roleId) {
+    const qRes = await fetch(
+      `${supabaseUrl}/rest/v1/roles?name=eq.super-admin&select=id`,
+      { headers },
+    );
+    const qData = await qRes.json().catch(() => []);
+    roleId = qData[0]?.id;
+  }
+
+  if (!roleId) {
+    s2.stop(pc.yellow('Could not create or locate super-admin role — role assignment skipped.'));
+  } else {
+    s2.stop(pc.green(`super-admin role ready ✓  ${pc.dim('(id: ' + roleId + ')')})`));
+  }
+
+  // ── 3. Create user_profile row ────────────────────────────────────────────
+  const s3 = spinner();
+  s3.start('Creating user_profile…');
+  const profileRes = await fetch(`${supabaseUrl}/rest/v1/user_profile`, {
+    method:  'POST',
+    headers: { ...headers, Prefer: 'resolution=merge-duplicates' },
+    body: JSON.stringify({
+      user_id:  userId,
+      Username: adminEmail.trim().split('@')[0],
+    }),
+  });
+
+  if (!profileRes.ok) {
+    const body = await profileRes.json().catch(() => ({}));
+    s3.stop(pc.yellow('Could not insert user_profile.'));
+    log.warn(body.message || JSON.stringify(body));
+  } else {
+    s3.stop(pc.green('user_profile created ✓'));
+  }
+
+  // ── 4. Assign super-admin role ────────────────────────────────────────────
+  if (roleId) {
+    const s4 = spinner();
+    s4.start('Assigning super-admin role in user_roles…');
+    const assignRes = await fetch(`${supabaseUrl}/rest/v1/user_roles`, {
+      method:  'POST',
+      headers: { ...headers, Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify({ user_id: userId, role_id: roleId }),
+    });
+
+    if (!assignRes.ok) {
+      const body = await assignRes.json().catch(() => ({}));
+      s4.stop(pc.yellow('Could not assign role.'));
+      log.warn(body.message || JSON.stringify(body));
+    } else {
+      s4.stop(pc.green('super-admin role assigned ✓'));
+      log.success(
+        `First admin ready — log in with: ${pc.bold(adminEmail.trim())}`,
+      );
+    }
+  }
+}
+
+/**
+ * Write a .env file so Vite bakes VITE_ variables into the frontend bundle
+ * at build time. Worker vars/secrets are server-side only and never visible
+ * to the browser bundle — the .env file bridges that gap.
+ * The file is git-ignored and regenerated on every setup run.
+ */
+function writeEnvFile(supabaseUrl, supabasePublishableKey) {
+  const envPath = join(ROOT, '.env');
+  const contents = [
+    '# Generated by npm run setup — do not commit (git-ignored)',
+    `VITE_SUPABASE_URL=${supabaseUrl.trim()}`,
+    `VITE_SUPABASE_PUBLISHABLE_KEY=${supabasePublishableKey.trim()}`,
+  ].join('\n') + '\n';
+  writeFileSync(envPath, contents, 'utf8');
 }
 
 async function stepApiToken() {
@@ -660,8 +825,51 @@ async function stepMigrations(supabaseUrl, serviceRoleKey) {
 
   if (aborted) {
     log.warn('Migrations aborted. Fix the failing migration and re-run  npm run setup.');
-  } else {
-    log.success('Migrations complete.');
+    return;
+  }
+
+  log.success('Migrations complete.');
+
+  // ── 4. Register the JWT claims hook in Supabase Auth ───────────────────
+  // The function was just created by Auth/Access_hook.sql.
+  // This PATCH call enables it as the "Customize Access Token (JWT) Claims"
+  // hook in Supabase Auth → Auth Hooks (schema: public, fn: custom_access_token_hook).
+  const hs = spinner();
+  hs.start('Registering custom_access_token_hook in Supabase Auth Hooks…');
+  try {
+    const hookRes = await fetch(
+      `https://api.supabase.com/v1/projects/${projectRef}/config/auth`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization:  `Bearer ${pat.trim()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          hook_custom_access_token_enabled: true,
+          hook_custom_access_token_uri:
+            'pg-functions://postgres/public/custom_access_token_hook',
+        }),
+      },
+    );
+    if (!hookRes.ok) {
+      const raw = await hookRes.text().catch(() => '');
+      let detail = raw;
+      try { detail = JSON.parse(raw).message || raw; } catch { /* ignore */ }
+      hs.stop(pc.yellow(`Auth hook registration failed (HTTP ${hookRes.status}): ${detail}`));
+      log.warn(
+        'Enable it manually: Supabase dashboard → Authentication → Auth Hooks\n' +
+        '  Type: Postgres function  |  Schema: public  |  Function: custom_access_token_hook',
+      );
+    } else {
+      hs.stop(pc.green('custom_access_token_hook registered as JWT claims hook ✓'));
+    }
+  } catch (err) {
+    hs.stop(pc.yellow(`Auth hook registration error: ${err.message}`));
+    log.warn(
+      'Enable it manually: Supabase dashboard → Authentication → Auth Hooks\n' +
+      '  Type: Postgres function  |  Schema: public  |  Function: custom_access_token_hook',
+    );
   }
 }
 
@@ -741,7 +949,8 @@ async function main() {
       `  ${pc.cyan('4.')} Set ${pc.yellow('CF_API_TOKEN')} as a Worker secret`,
       `  ${pc.cyan('5.')} Supabase URL ${pc.dim('(var)')} + publishable key ${pc.dim('(Worker secret)')} + secret key ${pc.dim('(Secrets Store)')} + storage`,
       `  ${pc.cyan('6.')} Apply database migrations via Supabase Management API`,
-      `  ${pc.cyan('7.')} Build  →  Deploy`,
+      `  ${pc.cyan('7.')} Register first super-admin user`,
+      `  ${pc.cyan('8.')} Build  →  Deploy`,
       '',
       pc.dim('You can re-run this wizard any time with  npm run setup'),
     ].join('\n'),
@@ -794,12 +1003,16 @@ async function main() {
   log.step(pc.bold('Step 6 — Database migrations'));
   await stepMigrations(supabaseUrl, supabaseSecretKey);
 
-  // ── 8. Build ──────────────────────────────────────────────────────────────
-  log.step(pc.bold('Step 7 — Build'));
+  // ── 8. First super-admin user ─────────────────────────────────────────────
+  log.step(pc.bold('Step 7 — First super-admin user'));
+  await stepFirstAdmin(supabaseUrl, supabaseSecretKey);
+
+  // ── 9. Build ──────────────────────────────────────────────────────────────
+  log.step(pc.bold('Step 8 — Build'));
   await stepBuild();
 
-  // ── 9. Deploy ─────────────────────────────────────────────────────────────
-  log.step(pc.bold('Step 8 — Deploy'));
+  // ── 10. Deploy ────────────────────────────────────────────────────────────
+  log.step(pc.bold('Step 9 — Deploy'));
   await stepDeploy();
 
   // ── Done ──────────────────────────────────────────────────────────────────

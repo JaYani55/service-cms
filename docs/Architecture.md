@@ -101,7 +101,7 @@ All database tables are defined as plain SQL files under `migrations/`. They are
 | `mentorbooking_events_archive.sql` | Archived events table. Same FK requirements as `mentorbooking_events`. |
 | `mentorbooking_notifications.sql` | Per-user event notifications. FK to `user_profile`. |
 | `agent_logs.sql` | Page-builder AI agent request/response log. FK to `page_schemas`. |
-| `Auth/Access_hook.sql` | Supabase Auth hook function (`custom_access_token_hook`) that injects `user_roles` into JWT claims. Requires `roles` and `user_roles` tables to exist. |
+| `Auth/Access_hook.sql` | Supabase Auth hook function (`custom_access_token_hook`) that injects `user_roles` into JWT claims. Requires `roles` and `user_roles` tables to exist. Also includes `GRANT EXECUTE … TO supabase_auth_admin`, `GRANT USAGE ON SCHEMA public`, and the corresponding `REVOKE` from `authenticated`, `anon`, `public` — required for the hook to be callable by Supabase Auth internals. |
 
 ### Dependency Order
 
@@ -150,11 +150,12 @@ Run with `npm run setup`. An interactive CLI wizard ([@clack/prompts](https://gi
 | 3 | `stepSecretsStore()` | Lists existing Secrets Stores via `wrangler secrets-store store list`. Creates one named `service-cms` if none exist. |
 | 4 | `patchWranglerJsonc()` | Copies `wrangler.default.jsonc` → `wrangler.jsonc` and substitutes `CF_ACCOUNT_ID` + `SECRETS_STORE_ID`. |
 | 5 | `stepApiToken()` | Prompts for a Cloudflare API token and stores it as a Worker secret via `wrangler secret put CF_API_TOKEN`. |
-| 6 | `stepSupabaseSecrets()` | Collects Supabase URL, publishable key, secret key, and storage config. Stores: `SUPABASE_PUBLISHABLE_KEY` as a Worker secret; `SUPABASE_SECRET_KEY` in the Secrets Store. |
+| 6 | `stepSupabaseSecrets()` | Collects Supabase URL, publishable key, secret key, and storage config. Stores: `SUPABASE_PUBLISHABLE_KEY` as a Worker secret; `SUPABASE_SECRET_KEY` in the Secrets Store. Calls `writeEnvFile()` to write `.env` with `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` for Vite build-time substitution. |
 | 6b | `patchWranglerVars()` | Writes `SUPABASE_URL`, `STORAGE_PROVIDER`, `STORAGE_BUCKET`, `R2_PUBLIC_URL` into the `vars` block of `wrangler.jsonc`. |
-| 7 | `stepMigrations()` | Applies all SQL migrations via the Supabase Management API (see below). |
-| 8 | `stepBuild()` | Runs `npm run build`. |
-| 9 | `stepDeploy()` | Runs `wrangler deploy`. |
+| 7 | `stepMigrations()` | Applies all SQL migrations via the Supabase Management API (see below). After all migrations succeed, automatically registers `custom_access_token_hook` as the Supabase JWT claims hook via `PATCH /v1/projects/{ref}/config/auth`. |
+| 8 | `stepFirstAdmin()` | Optionally creates the first super-admin user. Creates an auth user with `email_confirm: true` (immediately active), upserts a `super-admin` role with `app: ["mentorbooking"]`, creates a `user_profile` row, and assigns the role via `user_roles`. |
+| 9 | `stepBuild()` | Runs `npm run build`. Vite reads `.env` written in step 6 and bakes `VITE_` variables into the browser bundle. |
+| 10 | `stepDeploy()` | Runs `wrangler deploy`. |
 
 ### Secret Storage Strategy
 
@@ -175,3 +176,4 @@ Run with `npm run setup`. An interactive CLI wizard ([@clack/prompts](https://gi
 2. **PAT prompt** — asks for a Supabase personal access token (must start with `sb_pat_` or `sbp_`). The PAT is used only during setup and is never stored.
 3. **Sequential execution** — applies each file in the [dependency order](#dependency-order) above via `POST https://api.supabase.com/v1/projects/{ref}/database/query`.
 4. **Interactive failure handling** — if a migration fails, the error is displayed in full and the user is asked `Continue with remaining migrations? (y/N)` (default: No) before proceeding.
+5. **Auth hook registration** — after all migrations succeed, sends `PATCH https://api.supabase.com/v1/projects/{ref}/config/auth` with `hook_custom_access_token_enabled: true` and `hook_custom_access_token_uri: "pg-functions://postgres/public/custom_access_token_hook"`. Equivalent to registering the hook manually in **Authentication → Auth Hooks** in the Supabase dashboard.

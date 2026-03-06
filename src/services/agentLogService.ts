@@ -1,6 +1,6 @@
 import type { AgentLog, AgentLogStats, AgentLogPagination } from '@/types/pagebuilder';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
+import { API_URL } from '@/lib/apiUrl';
 
 // --- Fetch Logs (paginated, filterable) ---
 

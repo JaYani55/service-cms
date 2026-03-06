@@ -5,7 +5,7 @@
  * These routes live on the Hono Worker and proxied to CF Secrets Store.
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
+import { API_URL } from '@/lib/apiUrl';
 
 export interface CfSecret {
   id: string;

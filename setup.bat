@@ -53,4 +53,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo.
+echo  Setup finished successfully.
+echo  Press any key to close this window.
+pause
+
 endlocal
