@@ -100,6 +100,12 @@ export const SECRETS_MANIFEST: SecretDefinition[] = [
 
 // ── API calls ────────────────────────────────────────────────────────────────
 
+export interface EnvStatusEntry {
+  name: string;
+  hasValue: boolean;
+  source: 'secrets-store' | 'env-var' | 'unset';
+}
+
 export async function listSecrets(): Promise<CfSecret[]> {
   const res = await fetch(`${API_URL}/api/secrets`);
   if (!res.ok) {
@@ -108,6 +114,13 @@ export async function listSecrets(): Promise<CfSecret[]> {
   }
   const data = await res.json() as { secrets: CfSecret[] };
   return data.secrets;
+}
+
+export async function getEnvStatus(): Promise<EnvStatusEntry[]> {
+  const res = await fetch(`${API_URL}/api/secrets/env-status`);
+  if (!res.ok) return [];
+  const data = await res.json() as { status: EnvStatusEntry[] };
+  return data.status ?? [];
 }
 
 export async function listStores(): Promise<CfStore[]> {

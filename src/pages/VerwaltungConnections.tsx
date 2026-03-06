@@ -54,6 +54,7 @@ import { toast } from 'sonner';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   listSecrets,
+  getEnvStatus,
   upsertSecret,
   deleteSecret,
   getMediaConfig,
@@ -62,12 +63,14 @@ import {
   type CfSecret,
   type SecretDefinition,
   type MediaConfig,
+  type EnvStatusEntry,
 } from '@/services/connectionsService';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 interface SecretWithStatus extends SecretDefinition {
   cfSecret: CfSecret | null; // null = not yet stored in CF
+  envConfigured: boolean;    // true = value present via env-var or secrets-store binding
 }
 
 interface EditState {
@@ -87,7 +90,8 @@ function CategoryIcon({ category }: { category: string }) {
 }
 
 function StatusBadge({ secret }: { secret: SecretWithStatus }) {
-  if (!secret.cfSecret) {
+  const isConfigured = secret.cfSecret !== null || secret.envConfigured;
+  if (!isConfigured) {
     return (
       <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/30 gap-1">
         <ShieldAlert className="h-3 w-3" />
@@ -129,6 +133,7 @@ const VerwaltungConnections: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [cfSecrets, setCfSecrets] = useState<CfSecret[]>([]);
+  const [envStatusMap, setEnvStatusMap] = useState<Record<string, boolean>>({});
   const [apiError, setApiError] = useState<string | null>(null);
 
   // Media storage live status
@@ -161,8 +166,18 @@ const VerwaltungConnections: React.FC = () => {
     setLoading(true);
     setApiError(null);
     try {
-      const data = await listSecrets();
+      const [data, envEntries] = await Promise.all([
+        listSecrets().catch(() => [] as CfSecret[]),
+        getEnvStatus(),
+      ]);
       setCfSecrets(data);
+      const map: Record<string, boolean> = {};
+      envEntries.forEach((e: EnvStatusEntry) => { map[e.name] = e.hasValue; });
+      setEnvStatusMap(map);
+      // Only show API error if both failed
+      if (data.length === 0 && envEntries.length === 0) {
+        setApiError('Could not reach Worker API. Make sure the Worker is deployed.');
+      }
     } catch (err) {
       setApiError(err instanceof Error ? err.message : 'Failed to load secrets from Cloudflare');
     } finally {
@@ -184,10 +199,11 @@ const VerwaltungConnections: React.FC = () => {
     loadMediaStatus();
   }, [loadSecrets, loadMediaStatus]);
 
-  // Build merged list: manifest entry + CF status
+  // Build merged list: manifest entry + CF secrets store status + env-var status
   const secretsWithStatus: SecretWithStatus[] = SECRETS_MANIFEST.map((def) => ({
     ...def,
     cfSecret: cfSecrets.find((s) => s.name === def.name) ?? null,
+    envConfigured: envStatusMap[def.name] ?? false,
   }));
 
   // Group by category
@@ -270,9 +286,10 @@ const VerwaltungConnections: React.FC = () => {
 
   // ── Summary stats ───────────────────────────────────────────────────────
 
-  const configuredCount = secretsWithStatus.filter((s) => s.cfSecret !== null).length;
+  const isConfigured = (s: SecretWithStatus) => s.cfSecret !== null || s.envConfigured;
+  const configuredCount = secretsWithStatus.filter(isConfigured).length;
   const requiredCount = secretsWithStatus.filter((s) => s.required).length;
-  const requiredConfigured = secretsWithStatus.filter((s) => s.required && s.cfSecret !== null).length;
+  const requiredConfigured = secretsWithStatus.filter((s) => s.required && isConfigured(s)).length;
   const allRequiredDone = requiredConfigured === requiredCount;
 
   return (
@@ -584,6 +601,7 @@ const VerwaltungConnections: React.FC = () => {
                               description: s.comment ?? '',
                               required: false,
                               cfSecret: s,
+                              envConfigured: true,
                             })
                           }
                         >
@@ -601,6 +619,7 @@ const VerwaltungConnections: React.FC = () => {
                               description: '',
                               required: false,
                               cfSecret: s,
+                              envConfigured: true,
                             })
                           }
                         >

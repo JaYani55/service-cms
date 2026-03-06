@@ -49,7 +49,7 @@ secrets.get('/', async (c) => {
   const configErr = missingConfig(c.env);
   if (configErr) return c.json({ error: configErr }, 503);
 
-  const url = `${CF_API_BASE}/accounts/${c.env.CF_ACCOUNT_ID}/secret_store/stores/${c.env.SECRETS_STORE_ID}/secrets`;
+  const url = `${CF_API_BASE}/accounts/${c.env.CF_ACCOUNT_ID}/secrets_store/stores/${c.env.SECRETS_STORE_ID}/secrets`;
 
   const res = await fetch(url, { headers: cfHeaders(c.env.CF_API_TOKEN!) });
   const json = await res.json() as any;
@@ -59,6 +59,37 @@ secrets.get('/', async (c) => {
   }
 
   return c.json({ secrets: json.result ?? [] });
+});
+
+/**
+ * GET /api/secrets/env-status
+ * Returns which known secrets/env-vars have a non-empty value bound in this Worker.
+ * Checks both plain env vars (wrangler.jsonc vars) and Secrets Store bindings.
+ * Values are NEVER returned — only boolean presence.
+ */
+const KNOWN_KEYS: Array<{ name: string; envKey: keyof Env; ssKey?: keyof Env }> = [
+  { name: 'SUPABASE_URL',            envKey: 'SUPABASE_URL',            ssKey: 'SS_SUPABASE_URL' },
+  { name: 'SUPABASE_PUBLISHABLE_KEY', envKey: 'SUPABASE_PUBLISHABLE_KEY', ssKey: 'SS_SUPABASE_PUBLISHABLE_KEY' },
+  { name: 'SUPABASE_SECRET_KEY',      envKey: 'SUPABASE_URL',            ssKey: 'SS_SUPABASE_SECRET_KEY' }, // no plain fallback by design
+  { name: 'STORAGE_PROVIDER',        envKey: 'STORAGE_PROVIDER' as any,  ssKey: 'SS_STORAGE_PROVIDER' },
+  { name: 'STORAGE_BUCKET',          envKey: 'STORAGE_BUCKET' as any,    ssKey: 'SS_STORAGE_BUCKET' },
+  { name: 'R2_PUBLIC_URL',           envKey: 'R2_PUBLIC_URL' as any,     ssKey: 'SS_R2_PUBLIC_URL' },
+  { name: 'CF_API_TOKEN',            envKey: 'CF_API_TOKEN' as any },
+];
+
+secrets.get('/env-status', (c) => {
+  const env = c.env as any;
+  const status: Array<{ name: string; hasValue: boolean; source: string }> = KNOWN_KEYS.map(({ name, envKey, ssKey }) => {
+    const fromSS = ssKey ? !!env[ssKey] : false;
+    // For SUPABASE_SECRET_KEY there is intentionally no plain env fallback
+    const fromEnv = name !== 'SUPABASE_SECRET_KEY' ? !!(env[envKey] as string | undefined) : false;
+    return {
+      name,
+      hasValue: fromSS || fromEnv,
+      source: fromSS ? 'secrets-store' : fromEnv ? 'env-var' : 'unset',
+    };
+  });
+  return c.json({ status });
 });
 
 /**
@@ -73,7 +104,7 @@ secrets.get('/stores', async (c) => {
   if (!accountId || accountId === '<YOUR_CLOUDFLARE_ACCOUNT_ID>')
     return c.json({ error: 'CF_ACCOUNT_ID is not configured' }, 503);
 
-  const url = `${CF_API_BASE}/accounts/${accountId}/secret_store/stores`;
+  const url = `${CF_API_BASE}/accounts/${accountId}/secrets_store/stores`;
   const res = await fetch(url, { headers: cfHeaders(token) });
   const json = await res.json() as any;
 
@@ -100,7 +131,7 @@ secrets.put('/:name', async (c) => {
     return c.json({ error: 'Request body must include { value: string }' }, 400);
   }
 
-  const storeBase = `${CF_API_BASE}/accounts/${c.env.CF_ACCOUNT_ID}/secret_store/stores/${c.env.SECRETS_STORE_ID}/secrets`;
+  const storeBase = `${CF_API_BASE}/accounts/${c.env.CF_ACCOUNT_ID}/secrets_store/stores/${c.env.SECRETS_STORE_ID}/secrets`;
 
   // First: check if the secret already exists (to decide create vs update)
   const listRes = await fetch(storeBase, { headers: cfHeaders(c.env.CF_API_TOKEN!) });
@@ -155,7 +186,7 @@ secrets.delete('/:name', async (c) => {
   if (configErr) return c.json({ error: configErr }, 503);
 
   const secretName = c.req.param('name');
-  const storeBase = `${CF_API_BASE}/accounts/${c.env.CF_ACCOUNT_ID}/secret_store/stores/${c.env.SECRETS_STORE_ID}/secrets`;
+  const storeBase = `${CF_API_BASE}/accounts/${c.env.CF_ACCOUNT_ID}/secrets_store/stores/${c.env.SECRETS_STORE_ID}/secrets`;
 
   // Look up the secret ID first
   const listRes = await fetch(storeBase, { headers: cfHeaders(c.env.CF_API_TOKEN!) });
