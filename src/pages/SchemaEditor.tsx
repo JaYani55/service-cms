@@ -19,8 +19,9 @@ import {
 import type { SchemaFieldDefinition, PageSchema } from '@/types/pagebuilder';
 import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
+import { SCHEMA_TEMPLATES, type SchemaTemplate } from '@/config/schemaTemplates';
 
-const FIELD_TYPES = ['string', 'number', 'boolean', 'array', 'object', 'ContentBlock[]', 'media'] as const;
+const FIELD_TYPES = ['string', 'number', 'boolean', 'array', 'object', 'ContentBlock[]', 'media', 'string[]'] as const;
 
 const emptyField = (): SchemaFieldDefinition => ({
   name: '',
@@ -342,6 +343,15 @@ const SchemaEditor: React.FC = () => {
     }
   };
 
+  const applyTemplate = (template: typeof SCHEMA_TEMPLATES[0]) => {
+    setName(language === 'en' ? template.name : template.nameDe);
+    setDescription(language === 'en' ? template.description : template.descriptionDe);
+    setFields(jsonSchemaToFields(template.schema));
+    toast.info(language === 'en'
+      ? `Template "${template.name}" applied`
+      : `Vorlage "${template.nameDe}" angewendet`);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -365,6 +375,36 @@ const SchemaEditor: React.FC = () => {
             : (language === 'en' ? 'New Schema' : 'Neues Schema')}
         </h1>
       </div>
+
+      {/* Templates Selection (only when creating new) */}
+      {!isEditing && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {SCHEMA_TEMPLATES.map((template) => (
+            <Card
+              key={template.id}
+              className="hover:border-primary cursor-pointer transition-colors border-2 border-transparent"
+              onClick={() => applyTemplate(template)}
+            >
+              <CardHeader className="p-4 pb-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-2xl">{template.icon}</span>
+                  <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
+                    {language === 'en' ? 'Template' : 'Vorlage'}
+                  </Badge>
+                </div>
+                <CardTitle className="text-base mt-2">
+                  {language === 'en' ? template.name : template.nameDe}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <p className="text-xs text-muted-foreground line-clamp-2">
+                  {language === 'en' ? template.description : template.descriptionDe}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Basic Info */}
       <Card>

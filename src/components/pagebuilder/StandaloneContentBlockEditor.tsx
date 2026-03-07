@@ -16,6 +16,9 @@ import { ImageUploader } from './ImageUploader';
 import { MarkdownEditor } from './MarkdownEditor';
 import { Trash2, Plus, X } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
 
 const BLOCK_LABELS: Record<string, string> = {
   text: 'Text Block',
@@ -46,14 +49,42 @@ export const StandaloneContentBlockEditor: React.FC<StandaloneContentBlockEditor
   onChange,
   onRemove,
 }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: block.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 1 : 0,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
   // Typed patch helper — merges partial update onto current block
   const patch = (update: Record<string, unknown>) =>
     onChange({ ...block, ...update } as ContentBlock);
 
   return (
-    <Card className="p-4 space-y-4 bg-muted/30">
-      <div className="flex justify-between items-center">
+    <Card
+      ref={setNodeRef}
+      style={style}
+      className={`p-4 space-y-4 bg-muted/30 relative transition-colors ${isDragging ? 'border-primary ring-2 ring-primary/20 bg-background' : ''}`}
+    >
+      <div className="flex justify-between items-center group">
         <Label className="text-base font-semibold flex items-center gap-2">
+          {/* Drag Handle */}
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing p-1 -ml-1 hover:bg-muted rounded transition-colors"
+          >
+            <GripVertical className="h-5 w-5 text-muted-foreground" />
+          </div>
           <span className="text-lg">{BLOCK_ICONS[block.type] ?? '📦'}</span>
           <span>{BLOCK_LABELS[block.type] ?? block.type}</span>
           <Badge variant="outline" className="text-[10px] uppercase font-mono">{block.type}</Badge>

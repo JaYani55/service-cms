@@ -1,4 +1,20 @@
 import React, { useState, useCallback } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { restrictToVerticalAxis, restrictToParentElement } from '@dnd-kit/modifiers';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -108,6 +124,28 @@ interface ContentBlocksEditorProps {
 }
 
 const ContentBlocksEditor: React.FC<ContentBlocksEditorProps> = ({ fieldName, blocks, onChange }) => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5, // Requires moving 5px before drag starts to not interfere with clicks
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = blocks.findIndex((b) => b.id === active.id);
+      const newIndex = blocks.findIndex((b) => b.id === over.id);
+      if (oldIndex !== -1 && newIndex !== -1) {
+        onChange(arrayMove(blocks, oldIndex, newIndex));
+      }
+    }
+  };
+
   const addBlock = (type: ContentBlock['type']) =>
     onChange([...blocks, createDefaultBlock(type, fieldName)]);
 
@@ -119,14 +157,27 @@ const ContentBlocksEditor: React.FC<ContentBlocksEditorProps> = ({ fieldName, bl
 
   return (
     <div className="space-y-3">
-      {blocks.map((block, idx) => (
-        <StandaloneContentBlockEditor
-          key={block.id}
-          block={block}
-          onChange={(b) => updateBlock(idx, b)}
-          onRemove={() => onChange(blocks.filter((_, i) => i !== idx))}
-        />
-      ))}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+        modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+      >
+        <SortableContext
+          items={blocks.map((b) => b.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {blocks.map((block, idx) => (
+            <StandaloneContentBlockEditor
+              key={block.id}
+              block={block}
+              onChange={(b) => updateBlock(idx, b)}
+              onRemove={() => onChange(blocks.filter((_, i) => i !== idx))}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
+
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button type="button" size="sm" variant="outline" className="w-full border-dashed">

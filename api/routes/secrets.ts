@@ -120,14 +120,24 @@ secrets.get('/stores', async (c) => {
  * Create or update a secret by name.
  * Body: { value: string, comment?: string }
  */
-secrets.put('/:name', async (c) => {
+secrets.post('/:name', async (c) => {
   const configErr = missingConfig(c.env);
   if (configErr) return c.json({ error: configErr }, 503);
 
   const secretName = c.req.param('name');
-  const body = await c.req.json<{ value: string; comment?: string }>();
+  let body: { value: string; comment?: string };
+  try {
+    // Explicitly read as text and parse to see if it's really valid
+    const raw = await c.req.text();
+    if (!raw) {
+      return c.json({ error: 'Empty request body' }, 400);
+    }
+    body = JSON.parse(raw);
+  } catch (e) {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
 
-  if (!body.value) {
+  if (!body || !body.value) {
     return c.json({ error: 'Request body must include { value: string }' }, 400);
   }
 
@@ -147,7 +157,7 @@ secrets.put('/:name', async (c) => {
       headers: cfHeaders(c.env.CF_API_TOKEN!),
       body: JSON.stringify({
         value: body.value,
-        comment: body.comment ?? '',
+        comment: body.comment || '',
       }),
     });
   } else {
@@ -159,7 +169,7 @@ secrets.put('/:name', async (c) => {
         name: secretName,
         value: body.value,
         scopes: ['workers'],
-        comment: body.comment ?? '',
+        comment: body.comment || '',
       }),
     });
   }

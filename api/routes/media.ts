@@ -106,8 +106,20 @@ media.get('/list', async (c) => {
       return c.json({ items: [...folders, ...files] });
     } else {
       // ── Supabase Storage ────────────────────────────────────────────────
-      const supabase = await createSupabaseClient(c.env);
-      const { data, error } = await supabase.storage.from(cfg.bucket!).list(path || undefined, {
+      const supabase = await createSupabaseAdminClient(c.env);
+      const bucketName = cfg.bucket!;
+      
+      // Auto-create bucket if it doesn't exist
+      const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+      if (!listError && !buckets?.find(b => b.name === bucketName)) {
+        console.log(`[Media] Creating missing bucket: ${bucketName}`);
+        await supabase.storage.createBucket(bucketName, {
+          public: true,
+          fileSizeLimit: 52428800, // 50MB
+        });
+      }
+
+      const { data, error } = await supabase.storage.from(bucketName).list(path || undefined, {
         limit: 200,
         sortBy: { column: 'created_at', order: 'desc' },
       });
@@ -171,7 +183,7 @@ media.post('/upload', async (c) => {
       return c.json({ url, path: key });
     } else {
       // ── Supabase Storage ────────────────────────────────────────────────
-      const supabase = await createSupabaseClient(c.env);
+      const supabase = await createSupabaseAdminClient(c.env);
       const buf = await file.arrayBuffer();
       const { error } = await supabase.storage
         .from(cfg.bucket!)
@@ -201,7 +213,7 @@ media.delete('/file', async (c) => {
     if (cfg.provider === 'r2') {
       await c.env.MEDIA_BUCKET!.delete(path);
     } else {
-      const supabase = await createSupabaseClient(c.env);
+      const supabase = await createSupabaseAdminClient(c.env);
       const { error } = await supabase.storage.from(cfg.bucket!).remove([path]);
       if (error) return c.json({ error: error.message }, 500);
     }

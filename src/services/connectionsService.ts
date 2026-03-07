@@ -135,9 +135,12 @@ export async function listStores(): Promise<CfStore[]> {
 
 export async function upsertSecret(name: string, value: string, comment?: string): Promise<void> {
   const res = await fetch(`${API_URL}/api/secrets/${encodeURIComponent(name)}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ value, comment }),
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Accept': 'application/json' 
+    },
+    body: JSON.stringify({ value, comment: comment || '' }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Unknown error' })) as any;

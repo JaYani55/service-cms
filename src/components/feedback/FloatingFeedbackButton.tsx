@@ -6,14 +6,16 @@ import { Button } from "../ui/button";
 export function FloatingFeedbackButton() {
   const { theme, language } = useTheme();
   const { user } = useAuth();
-  const feedbackUrl = "https://forms.office.com/e/5hXGXsA6iX";
+  const feedbackUrl = "/404";
 
   const handleClick = () => {
-    // Open the feedback form in a new tab
-    window.open(feedbackUrl, "_blank", "noopener noreferrer");
+    // Lead to a 404 page instead
+    window.location.href = feedbackUrl;
   };
   
-  // Only render if user is logged in
+  // Always hidden (hide the feedbackbutton element)
+  return null;
+
   if (!user) return null;
 
   return (
