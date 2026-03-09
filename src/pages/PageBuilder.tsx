@@ -37,7 +37,7 @@ const PageBuilder: React.FC = () => {
             // Load existing page
             const page = await getPage(pageId);
             setPageRecord(page);
-            setInitialData(page.content as PageBuilderData);
+            setInitialData(page.content as unknown as PageBuilderData);
             setProductName(page.name);
           }
         } else if (id) {

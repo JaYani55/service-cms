@@ -24,6 +24,12 @@ import {
 interface ImageUploaderProps {
   value?: string;
   onChange: (url: string) => void;
+  /**
+   * Controls how the committed image is previewed above the picker button.
+   * - `'banner'` (default): full-width landscape strip, ideal for hero/cover images.
+   * - `'avatar'`: small fixed-size circle, ideal for profile/author pictures.
+   */
+  previewVariant?: 'banner' | 'avatar';
   /** @deprecated — storage is now configured server-side via Connections settings */
   bucket?: string;
   /** @deprecated — upload folder is now the current media browser path */
@@ -42,6 +48,7 @@ interface MediaItem {
 export const ImageUploader: React.FC<ImageUploaderProps> = ({
   value,
   onChange,
+  previewVariant = 'banner',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -213,6 +220,8 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
     if (open) {
+      // Sync internal selection with the current committed value
+      setSelectedImage(value || null);
       // Reset to root when opening
       setCurrentPath('');
       setPathHistory([]);
@@ -221,6 +230,48 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   };
 
   return (
+    <div className="space-y-2">
+      {/* Preview thumbnail shown when a value is committed */}
+      {value && previewVariant === 'avatar' && (
+        <div className="flex items-center gap-3">
+          <div className="relative group shrink-0">
+            <img
+              src={value}
+              alt="Vorschau"
+              className="w-16 h-16 rounded-full object-cover border-2 border-border"
+            />
+            <button
+              type="button"
+              onClick={() => onChange('')}
+              title="Bild entfernen"
+              className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground break-all line-clamp-2">{value.split('/').pop()}</p>
+        </div>
+      )}
+      {value && previewVariant === 'banner' && (
+        <div className="relative group w-full rounded-lg overflow-hidden border bg-muted/30">
+          <img
+            src={value}
+            alt="Vorschau"
+            className="w-full h-40 object-cover"
+          />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+          <Button
+            type="button"
+            variant="destructive"
+            size="icon"
+            className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={() => onChange('')}
+            title="Bild entfernen"
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button type="button" variant="outline" className="w-full">
@@ -491,5 +542,6 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
         </AlertDialogContent>
       </AlertDialog>
     </Dialog>
+    </div>
   );
 };

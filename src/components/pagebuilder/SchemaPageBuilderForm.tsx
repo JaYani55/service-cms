@@ -42,6 +42,7 @@ import { savePage, triggerRevalidation } from '@/services/pageService';
 import type { PageSchema, SchemaFieldDefinition, ContentBlock } from '@/types/pagebuilder';
 import { StandaloneContentBlockEditor } from './StandaloneContentBlockEditor';
 import { ImageUploader } from './ImageUploader';
+import { JsonImporter } from './JsonImporter';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -221,10 +222,19 @@ const SchemaFieldRenderer: React.FC<SchemaFieldRendererProps> = ({
 }) => {
   // media → ImageUploader
   if (field.type === 'media') {
+    const nameLower = field.name.toLowerCase();
+    const isAvatar =
+      nameLower.includes('avatar') ||
+      nameLower.includes('picture') ||
+      nameLower.includes('photo') ||
+      nameLower.includes('portrait') ||
+      nameLower.includes('headshot') ||
+      nameLower.includes('profile');
     return (
       <ImageUploader
         value={(value as string) || ''}
         onChange={(url) => onChange(url)}
+        previewVariant={isAvatar ? 'avatar' : 'banner'}
         bucket="booking_media"
         folder="product-images"
       />
@@ -536,6 +546,23 @@ export const SchemaPageBuilderForm: React.FC<SchemaPageBuilderFormProps> = ({
 
   const inactiveOptional = optionalFields.filter((f) => !activeOptional.has(f.name));
 
+  // ── JSON import handler
+  const handleJsonImport = useCallback((data: Record<string, unknown>) => {
+    setFormData((prev) => ({ ...prev, ...data }));
+    // Activate any optional field that received non-empty data
+    const newActive = new Set(activeOptional);
+    for (const f of optionalFields) {
+      if (!(f.name in data)) continue;
+      const v = data[f.name];
+      const isEmpty =
+        v === undefined || v === null || v === '' || v === false || v === 0 ||
+        (Array.isArray(v) && v.length === 0) ||
+        (typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length === 0);
+      if (!isEmpty) newActive.add(f.name);
+    }
+    setActiveOptional(newActive);
+  }, [activeOptional, optionalFields]);
+
   // ── Save handler
   const handleSave = async () => {
     if (!pageName.trim()) {
@@ -803,6 +830,7 @@ export const SchemaPageBuilderForm: React.FC<SchemaPageBuilderFormProps> = ({
       {/* ── Sticky Footer ─────────────────────────────────── */}
       <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-t z-50">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
           <p className="text-sm text-muted-foreground">
             Schema: <span className="font-semibold">{schema.name}</span>
             {' '}—{' '}
@@ -811,6 +839,8 @@ export const SchemaPageBuilderForm: React.FC<SchemaPageBuilderFormProps> = ({
               <Badge variant="default" className="ml-2 text-[10px]">ISR aktiv</Badge>
             )}
           </p>
+            <JsonImporter fields={fields} onImport={handleJsonImport} />
+          </div>
           <Button
             type="button"
             onClick={handleSave}
