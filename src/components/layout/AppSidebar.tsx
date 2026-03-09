@@ -1,4 +1,4 @@
-import { Calendar, Settings, Users, User, List, LogOut, HelpCircle, Moon, Sun, ChevronUp, Globe, FileText } from "lucide-react"
+import { Calendar, Settings, Users, User, List, LogOut, HelpCircle, Moon, Sun, ChevronUp, FileText, SlidersHorizontal } from "lucide-react"
 import { useLocation, Link } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { useTheme } from "@/contexts/ThemeContext"
@@ -27,7 +27,7 @@ import {
 
 export function AppSidebar() {
   const { logout, user } = useAuth()
-  const { theme, language, toggleTheme, toggleLanguage } = useTheme()
+  const { theme, language, toggleTheme } = useTheme()
   const { canAccessVerwaltung } = usePermissions()
   const location = useLocation()
 
@@ -47,11 +47,6 @@ export function AppSidebar() {
       url: "/list",
       icon: List,
     },
-    {
-      title: language === "en" ? "Me" : "Ich",
-      url: "/me",
-      icon: User,
-    },
   ]
 
   if (canAccessVerwaltung) {
@@ -68,9 +63,6 @@ export function AppSidebar() {
       }
     )
   }
-
-  const ukFlagUrl = "https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/gb.svg"
-  const germanFlagUrl = "https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/de.svg"
 
   return (
     <Sidebar collapsible="icon">
@@ -118,17 +110,13 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              
+
               <SidebarMenuItem>
-                <SidebarMenuButton onClick={toggleLanguage} tooltip={language === 'en' ? 'Switch Language' : 'Sprache wechseln'}>
-                  <div className="flex items-center justify-center w-4 h-4">
-                    {language === 'en' ? (
-                       <img src={germanFlagUrl} alt="DE" className="w-full h-auto object-cover rounded-[2px]" />
-                    ) : (
-                       <img src={ukFlagUrl} alt="EN" className="w-full h-auto object-cover rounded-[2px]" />
-                    )}
-                  </div>
-                  <span>{language === 'en' ? 'Switch to German' : 'Zu Englisch wechseln'}</span>
+                <SidebarMenuButton asChild tooltip={language === 'en' ? 'Preferences' : 'Einstellungen'}>
+                  <Link to="/settings">
+                    <SlidersHorizontal />
+                    <span>{language === 'en' ? 'Preferences' : 'Einstellungen'}</span>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
@@ -170,19 +158,12 @@ export function AppSidebar() {
                 side="top"
                 className="w-[--radix-popper-anchor-width]"
               >
-                <DropdownMenuItem onClick={toggleLanguage}>
-                    {language === "en" ? (
-                        <div className="flex items-center gap-2 w-full">
-                            <img src={germanFlagUrl} alt="German flag" className="h-4 w-6 object-cover rounded-sm" />
-                            <span>Switch to German</span>
-                        </div>
-                    ) : (
-                        <div className="flex items-center gap-2 w-full">
-                            <img src={ukFlagUrl} alt="UK flag" className="h-4 w-6 object-cover rounded-sm" />
-                            <span>Switch to English</span>
-                        </div>
-                    )}
-                </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                  <Link to="/settings" className="flex items-center gap-2 w-full">
+                      <SlidersHorizontal className="h-4 w-4" />
+                      <span>{language === 'en' ? 'Preferences' : 'Einstellungen'}</span>
+                  </Link>
+              </DropdownMenuItem>
                 <DropdownMenuItem onClick={toggleTheme}>
                     {theme === "dark" ? (
                         <div className="flex items-center gap-2 w-full">

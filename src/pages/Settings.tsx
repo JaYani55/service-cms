@@ -3,11 +3,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { DefaultViewSetting } from '@/components/profile/DefaultViewSetting';
-import { ArrowLeft, Info, Monitor, Shield, Zap, LayoutDashboard, PanelLeft } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ArrowLeft, LayoutDashboard, PanelLeft, Globe } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ProfileSkeleton } from '@/components/profile/ProfileSkeleton';
-import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Helper functions for localStorage
 const STORAGE_KEY_PREFIX = 'mentor_app_settings_';
@@ -48,8 +47,9 @@ const storeSetting = <T,>(userId: string, setting: string, value: T): boolean =>
 };
 
 const Settings = () => {
-  const { language, layoutMode, setLayoutMode } = useTheme();
+  const { language, layoutMode, setLayoutMode, changeLanguage } = useTheme();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [defaultView, setDefaultView] = React.useState<string>('events');
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
   const [isUpdating, setIsUpdating] = React.useState<boolean>(false);
@@ -97,49 +97,14 @@ const Settings = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <Link to="/me">
-          <Button variant="ghost" size="sm" className="gap-1">
-            <ArrowLeft className="h-4 w-4" /> 
-            {language === "en" ? "Back" : "Zurück"}
-          </Button>
-        </Link>
+        <Button variant="ghost" size="sm" className="gap-1" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-4 w-4" />
+          {language === "en" ? "Back" : "Zurück"}
+        </Button>
         <h1 className="text-3xl font-bold">
-          {language === "en" ? "Settings" : "Einstellungen"}
+          {language === "en" ? "Preferences" : "Einstellungen"}
         </h1>
       </div>
-
-      {/* Modern info card explaining client-side storage */}
-      <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
-        <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-        <AlertDescription className="text-blue-800 dark:text-blue-300">
-          <div className="space-y-3">
-            <p className="font-medium">
-              {language === "en" 
-                ? "📱 Device-Only Settings" 
-                : "📱 Gerätespezifische Einstellungen"}
-            </p>
-            <p className="text-sm">
-              {language === "en" 
-                ? "These preferences are saved directly on your device for instant loading and maximum privacy. They won't sync across different devices or browsers." 
-                : "Diese Einstellungen werden direkt auf Ihrem Gerät gespeichert für sofortiges Laden und maximalen Datenschutz. Sie werden nicht zwischen verschiedenen Geräten oder Browsern synchronisiert."}
-            </p>
-            <div className="flex flex-wrap gap-4 text-xs">
-              <div className="flex items-center gap-1">
-                <Zap className="h-3 w-3" />
-                <span>{language === "en" ? "Instant" : "Sofort"}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Shield className="h-3 w-3" />
-                <span>{language === "en" ? "Private" : "Privat"}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Monitor className="h-3 w-3" />
-                <span>{language === "en" ? "Device-specific" : "Gerätespezifisch"}</span>
-              </div>
-            </div>
-          </div>
-        </AlertDescription>
-      </Alert>
 
       {isLoading || isUpdating ? (
         <Card className="p-6">
@@ -205,6 +170,55 @@ const Settings = () => {
               language={language}
               onUpdate={handleUpdateDefaultView}
             />
+          </Card>
+
+          {/* Language */}
+          <Card className="p-6">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Globe className="h-5 w-5 text-primary" />
+                <h2 className="text-lg font-semibold">
+                  {language === "en" ? "Language" : "Sprache"}
+                </h2>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {language === "en"
+                  ? "Choose the interface language."
+                  : "Wähle die Sprache der Benutzeroberfläche."}
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div
+                  className={`cursor-pointer rounded-lg border-2 p-4 hover:bg-accent transition-all ${
+                    language === 'de' ? 'border-primary bg-accent/50' : 'border-transparent bg-card shadow-sm'
+                  }`}
+                  onClick={() => changeLanguage('de')}
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src="https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/de.svg"
+                      alt="DE"
+                      className="h-5 w-7 object-cover rounded-sm"
+                    />
+                    <span className="font-medium">Deutsch</span>
+                  </div>
+                </div>
+                <div
+                  className={`cursor-pointer rounded-lg border-2 p-4 hover:bg-accent transition-all ${
+                    language === 'en' ? 'border-primary bg-accent/50' : 'border-transparent bg-card shadow-sm'
+                  }`}
+                  onClick={() => changeLanguage('en')}
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src="https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/gb.svg"
+                      alt="EN"
+                      className="h-5 w-7 object-cover rounded-sm"
+                    />
+                    <span className="font-medium">English</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </Card>
         </div>
       )}

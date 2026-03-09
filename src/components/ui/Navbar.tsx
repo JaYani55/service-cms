@@ -1,15 +1,15 @@
 import { Button } from "@/components/ui/button";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTheme } from "../../contexts/ThemeContext";
-import { usePermissions } from '@/hooks/usePermissions'; // Add this import
-import { Moon, Sun, Menu, Calendar, Users, User, List, X, Settings, LogOut, HelpCircle } from "lucide-react";
+import { usePermissions } from '@/hooks/usePermissions';
+import { Moon, Sun, Menu, Calendar, Users, List, X, Settings, LogOut, HelpCircle, SlidersHorizontal, FileText } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import Logo from "../shared/Logo";
 
 const Navbar = () => {
   const { logout, user } = useAuth();
-  const { theme, language, toggleTheme, toggleLanguage } = useTheme();
+  const { theme, language, toggleTheme } = useTheme();
   const { canAccessVerwaltung } = usePermissions(); // Use centralized permission
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
@@ -18,22 +18,25 @@ const Navbar = () => {
     { icon: Users, label: language === "en" ? "Events" : "Veranstaltungen", href: "/events" },
     { icon: Calendar, label: language === "en" ? "Calendar" : "Kalender", href: "/calendar" },
     { icon: List, label: language === "en" ? "List" : "Liste", href: "/list" },
-    { icon: User, label: language === "en" ? "Me" : "Ich", href: "/me" },
   ];
 
   // Use centralized permission instead of role checks
   if (canAccessVerwaltung) {
-    menuItems.push({
-      icon: Settings,
-      label: language === "en" ? "Administration" : "Verwaltung",
-      href: "/verwaltung"
-    });
+    menuItems.push(
+      {
+        icon: FileText,
+        label: language === "en" ? "Pages" : "Seiten",
+        href: "/pages"
+      },
+      {
+        icon: Settings,
+        label: language === "en" ? "Administration" : "Verwaltung",
+        href: "/verwaltung"
+      }
+    );
   }
 
   const toggleMobileMenu = () => setMobileMenuOpen(!mobileMenuOpen);
-
-  const ukFlagUrl = "https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/gb.svg";
-  const germanFlagUrl = "https://raw.githubusercontent.com/lipis/flag-icons/main/flags/4x3/de.svg";
 
   return (
     <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50 shadow-sm">
@@ -61,7 +64,7 @@ const Navbar = () => {
           </div>
 
           <div className="flex items-center gap-2 md:gap-6">
-            {/* Info button to the left of language toggle */}
+            {/* Info */}
             <Link
               to="/Info"
               className="flex items-center gap-1.5 px-2 py-1 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 border transition-colors"
@@ -70,23 +73,20 @@ const Navbar = () => {
               <HelpCircle className="h-4 w-4" />
               <span className="font-semibold">{language === "en" ? "Info" : "Info"}</span>
             </Link>
-            <button
-              onClick={toggleLanguage}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 border transition-colors"
-              aria-label={language === "en" ? "Switch to German" : "Switch to English"}
+
+            {/* Preferences */}
+            <Link
+              to="/settings"
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-sm font-medium transition-colors border ${
+                location.pathname === '/settings'
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'text-gray-700 hover:bg-gray-100 active:bg-gray-200'
+              }`}
+              aria-label={language === "en" ? "Preferences" : "Einstellungen"}
             >
-              {language === "en" ? (
-                <>
-                  <img src={germanFlagUrl} alt="German flag" className="h-4 w-6 object-cover rounded-sm" />
-                  <span className="font-semibold">DE</span>
-                </>
-              ) : (
-                <>
-                  <img src={ukFlagUrl} alt="UK flag" className="h-4 w-6 object-cover rounded-sm" />
-                  <span className="font-semibold">EN</span>
-                </>
-              )}
-            </button>
+              <SlidersHorizontal className="h-4 w-4" />
+              <span className="font-semibold hidden md:inline">{language === "en" ? "Preferences" : "Einstellungen"}</span>
+            </Link>
 
             <button
               onClick={toggleTheme}
@@ -146,6 +146,18 @@ const Navbar = () => {
                 <span>{language === "en" ? "Logout" : "Abmelden"}</span>
               </button>
             )}
+            <Link
+              to="/settings"
+              className={`flex items-center px-3 py-3 rounded-md text-base font-medium ${
+                location.pathname === '/settings'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+              }`}
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <SlidersHorizontal className="h-5 w-5 mr-2" />
+              <span>{language === "en" ? "Preferences" : "Einstellungen"}</span>
+            </Link>
           </div>
         )}
       </div>

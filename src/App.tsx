@@ -89,9 +89,7 @@ const DocumentLanguageUpdater = () => {
   
   useEffect(() => {
     document.documentElement.lang = language === 'en' ? 'en' : 'de';
-    document.title = language === 'en' 
-      ? 'inklu-connect mentorbooking' 
-      : 'inklu-connect Mentorbuchung';
+    document.title = 'ServiceCMS';
   }, [language]);
   
   return null;

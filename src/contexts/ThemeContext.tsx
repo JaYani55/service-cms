@@ -10,6 +10,7 @@ interface ThemeContextType {
   layoutMode: LayoutMode;
   toggleTheme: () => void;
   toggleLanguage: () => void;
+  changeLanguage: (lang: Language) => void;
   setLayoutMode: (mode: LayoutMode) => void;
 }
 
@@ -17,7 +18,10 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('light');
-  const [language, setLanguage] = useState<Language>('de');
+  const [language, setLanguage] = useState<Language>(() => {
+    const stored = localStorage.getItem('app_language');
+    return (stored === 'en' || stored === 'de') ? stored : 'de';
+  });
   const [layoutMode, setLayoutModeState] = useState<LayoutMode>(() => {
     const stored = localStorage.getItem('app_layout_mode');
     return (stored === 'sidebar' || stored === 'navbar') ? stored : 'sidebar';
@@ -34,7 +38,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleLanguage = () => {
-    setLanguage(prev => prev === 'en' ? 'de' : 'en');
+    setLanguage(prev => {
+      const next = prev === 'en' ? 'de' : 'en';
+      localStorage.setItem('app_language', next);
+      return next;
+    });
   };
 
   const setLayoutMode = (mode: LayoutMode) => {
@@ -42,8 +50,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('app_layout_mode', mode);
   };
 
+  const changeLanguage = (lang: Language) => {
+    setLanguage(lang);
+    localStorage.setItem('app_language', lang);
+  };
+
   return (
-    <ThemeContext.Provider value={{ theme, language, layoutMode, toggleTheme, toggleLanguage, setLayoutMode }}>
+    <ThemeContext.Provider value={{ theme, language, layoutMode, toggleTheme, toggleLanguage, changeLanguage, setLayoutMode }}>
       {children}
     </ThemeContext.Provider>
   );
