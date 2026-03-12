@@ -62,7 +62,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         })
         .replace(/<ol>(.*?)<\/ol>/gs, (match, content) => {
           let index = 1;
-          const items = content.replace(/<li><p>(.*?)<\/p><\/li>/g, () => `${index++}. $1\n`).replace(/<li>(.*?)<\/li>/g, () => `${index++}. $1\n`);
+          const items = content.replace(/<li><p>(.*?)<\/p><\/li>/g, (_, text) => `${index++}. ${text}\n`).replace(/<li>(.*?)<\/li>/g, (_, text) => `${index++}. ${text}\n`);
           return items + '\n';
         })
         // Handle paragraphs (after other replacements to avoid conflicts)
