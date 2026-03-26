@@ -27,34 +27,34 @@ const Breadcrumb: React.FC = () => {
     '/profile': { label: { en: 'Profile', de: 'Profil' } },
     '/settings': { label: { en: 'Settings', de: 'Einstellungen' } },
     '/me': { label: { en: 'My Profile', de: 'Mein Profil' } },
-    '/verwaltung': { label: { en: 'Administration', de: 'Verwaltung' } },
-    '/verwaltung/add-mentor': { 
-      label: { en: 'Add Mentor', de: 'Mentor hinzufügen' },
-      parent: '/verwaltung'
+    '/admin': { label: { en: 'Administration', de: 'Verwaltung' } },
+    '/admin/add-mentor': { 
+      label: { en: 'Add Staff', de: 'Mitarbeiter hinzufügen' },
+      parent: '/admin'
     },
-    '/verwaltung/all-mentors': { 
-      label: { en: 'All Mentors', de: 'Alle Mentoren' },
-      parent: '/verwaltung'
+    '/admin/all-mentors': { 
+      label: { en: 'All Staff', de: 'Alle Mitarbeiter' },
+      parent: '/admin'
     },
-    '/verwaltung/all-products': { 
+    '/admin/all-products': { 
       label: { en: 'All Products', de: 'Alle Produkte' },
-      parent: '/verwaltung'
+      parent: '/admin'
     },
-    '/verwaltung/create-product': { 
+    '/admin/create-product': { 
       label: { en: 'Create Product', de: 'Produkt erstellen' },
-      parent: '/verwaltung'
+      parent: '/admin'
     },
-    '/verwaltung/trait': { 
+    '/admin/trait': { 
       label: { en: 'Manage Traits', de: 'Eigenschaften verwalten' },
-      parent: '/verwaltung'
+      parent: '/admin'
     },
-    '/verwaltung/traitsmentorassign': { 
+    '/admin/traitsmentorassign': { 
       label: { en: 'Assign Traits', de: 'Eigenschaften zuweisen' },
-      parent: '/verwaltung'
+      parent: '/admin'
     },
-    '/verwaltung/accounts': { 
+    '/admin/accounts': { 
       label: { en: 'Account Management', de: 'Kontoverwaltung' },
-      parent: '/verwaltung'
+      parent: '/admin'
     },
     '/pages': { label: { en: 'Pages', de: 'Seiten' } },
     '/pages/schema/new': {
@@ -75,7 +75,7 @@ const Breadcrumb: React.FC = () => {
       isActive: location.pathname === '/'
     });
 
-    // Handle dynamic routes (like /events/:id, /verwaltung/product/:productId)
+    // Handle dynamic routes (like /events/:id, /admin/product/:productId)
     let currentPath = '';
     
     for (let i = 0; i < pathnames.length; i++) {
@@ -91,7 +91,7 @@ const Breadcrumb: React.FC = () => {
         
         if (config) {
           // For product details, show "Product Details" instead of the ID
-          if (parentPath === '/verwaltung/product') {
+          if (parentPath === '/admin/product') {
             breadcrumbs.push({
               label: language === 'en' ? 'Product Details' : 'Produktdetails',
               isActive: i === pathnames.length - 1

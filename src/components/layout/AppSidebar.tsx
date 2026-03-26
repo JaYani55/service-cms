@@ -59,7 +59,7 @@ export function AppSidebar() {
       },
       {
         title: language === "en" ? "Administration" : "Verwaltung",
-        url: "/verwaltung",
+        url: "/admin",
         icon: Settings,
       }
     )
@@ -76,6 +76,7 @@ export function AppSidebar() {
   // Dynamic sidebar items from installed plugins (admin group)
   const pluginAdminItems = canAccessVerwaltung
     ? getPluginSidebarItems('admin').filter((item) => {
+        if (item.requiredRole === 'super-admin') return user?.roles?.includes('super-admin') ?? false;
         if (item.requiredRole === 'admin') return canManagePlugins;
         return true;
       })

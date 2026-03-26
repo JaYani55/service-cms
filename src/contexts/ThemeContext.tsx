@@ -20,7 +20,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('light');
   const [language, setLanguage] = useState<Language>(() => {
     const stored = localStorage.getItem('app_language');
-    return (stored === 'en' || stored === 'de') ? stored : 'de';
+    return (stored === 'en' || stored === 'de') ? stored : 'en';
   });
   const [layoutMode, setLayoutModeState] = useState<LayoutMode>(() => {
     const stored = localStorage.getItem('app_layout_mode');

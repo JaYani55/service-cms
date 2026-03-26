@@ -38,7 +38,7 @@ const VerwaltungManageProducts = () => {
   // Add permission check
   useEffect(() => {
     if (!permissions.canManageProducts) {
-      navigate('/verwaltung');
+      navigate('/admin');
     }
   }, [permissions.canManageProducts, navigate]);
 
@@ -93,7 +93,7 @@ const VerwaltungManageProducts = () => {
 
   const handleNewProduct = () => {
     // Navigate to create product with state indicating we came from all-products
-    navigate('/verwaltung/create-product', { state: { from: '/verwaltung/all-products' } });
+    navigate('/admin/create-product', { state: { from: '/admin/all-products' } });
   };
 
   const handleProductsChange = () => {
@@ -147,7 +147,7 @@ const VerwaltungManageProducts = () => {
           key={product.id}
           className="relative overflow-hidden cursor-pointer group"
           clickable
-          onClick={() => navigate(`/verwaltung/product/${product.id}`)}
+          onClick={() => navigate(`/admin/product/${product.id}`)}
         >
           <div 
             className="h-28 rounded-t-lg flex items-center justify-center relative overflow-hidden"
@@ -323,7 +323,7 @@ const VerwaltungManageProducts = () => {
               <React.Fragment key={product.id}>
                 <TableRow 
                   className="cursor-pointer hover:bg-muted/50 group"
-                  onClick={() => navigate(`/verwaltung/product/${product.id}`)}
+                  onClick={() => navigate(`/admin/product/${product.id}`)}
                 >
                   <TableCell>
                     <div className="flex items-center justify-center gap-2">

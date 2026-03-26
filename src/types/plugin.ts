@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import type { LucideIcon } from 'lucide-react';
+import type { AppRole } from '@/types/auth';
 
 // ─── Manifest ────────────────────────────────────────────────────────────────
 // The plugin.json file that every plugin repo must provide at its root.
@@ -84,9 +85,9 @@ export interface PluginRoute {
   component: ComponentType;
   /**
    * Optional role gate. Mirrors ProtectedRoute's requiredRole prop.
-   * "admin" | "staff" | undefined (any authenticated user)
+    * "user" | "admin" | "super-admin" | undefined (any authenticated user)
    */
-  requiredRole?: 'admin' | 'staff';
+    requiredRole?: AppRole;
 }
 
 // ─── Sidebar Item ─────────────────────────────────────────────────────────────
@@ -108,10 +109,11 @@ export interface PluginSidebarItem {
   group: 'main' | 'admin';
   /**
    * Optional extra role requirement beyond the group's own gating.
-   * "admin" — only SUPERADMIN sees this item.
-   * "staff" — staff and above see this item (default for "admin" group items).
+    * "super-admin" — only super-admin sees this item.
+    * "admin" — admin and super-admin see this item.
+    * "user" — any authenticated app user sees this item.
    */
-  requiredRole?: 'admin' | 'staff';
+    requiredRole?: AppRole;
 }
 
 // ─── Plugin Definition ────────────────────────────────────────────────────────
@@ -131,7 +133,7 @@ export interface PluginSidebarItem {
  *   name: 'My Plugin',
  *   version: '1.0.0',
  *   routes: [
- *     { path: '/plugins/my-plugin/dashboard', component: Dashboard, requiredRole: 'staff' },
+ *     { path: '/plugins/my-plugin/dashboard', component: Dashboard, requiredRole: 'user' },
  *   ],
  *   sidebarItems: [
  *     { key: 'my-plugin-dashboard', path: '/plugins/my-plugin/dashboard', label: 'My Plugin', icon: LayoutDashboard, group: 'admin' },

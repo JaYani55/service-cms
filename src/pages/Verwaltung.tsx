@@ -30,6 +30,7 @@ type AdminCardType = {
   href: string;
   permission: PermissionFlag;
   color: string;
+  isSuperAdmin?: boolean;
 };
 
 const Verwaltung = () => {
@@ -51,22 +52,22 @@ const Verwaltung = () => {
   // Mentor Administration Cards
   const mentorCards: AdminCardType[] = [
     {
-      title: language === 'de' ? 'Alle MentorInnen' : 'All Mentors',
+      title: language === 'de' ? 'Alle Mitarbeiter' : 'All Staff',
       description: language === 'de' 
-        ? 'Übersicht und Verwaltung aller registrierten MentorInnen' 
-        : 'Overview and management of all registered mentors',
+        ? 'Übersicht und Verwaltung aller registrierten Mitarbeiter' 
+        : 'Overview and management of all registered staff',
       icon: Users,
-      href: '/verwaltung/all-mentors',
+      href: '/admin/all-mentors',
       permission: 'canViewMentorProfiles',
       color: 'from-blue-500 to-blue-600',
     },
     {
-      title: language === 'de' ? 'MentorIn hinzufügen' : 'Add Mentor',
+      title: language === 'de' ? 'Mitarbeiter hinzufügen' : 'Add Staff',
       description: language === 'de' 
-        ? 'Neue MentorIn-Profile erstellen und konfigurieren' 
-        : 'Create and configure new mentor profiles',
+        ? 'Neue Mitarbeiterprofile erstellen und konfigurieren' 
+        : 'Create and configure new staff profiles',
       icon: UserPlus,
-      href: '/verwaltung/add-mentor',
+      href: '/admin/add-mentor',
       permission: 'canManageMentors',
       color: 'from-green-500 to-green-600',
     },
@@ -76,7 +77,7 @@ const Verwaltung = () => {
         ? 'Mentor-Eigenschaften und Kategorien definieren' 
         : 'Define mentor traits and categories',
       icon: Tags,
-      href: '/verwaltung/trait',
+      href: '/admin/trait',
       permission: 'canManageTraits',
       color: 'from-purple-500 to-purple-600',
     },
@@ -86,7 +87,7 @@ const Verwaltung = () => {
         ? 'Eigenschaften zu MentorInnen zuordnen und verwalten' 
         : 'Assign and manage traits to mentors',
       icon: UserCheck,
-      href: '/verwaltung/traitsmentorassign',
+      href: '/admin/traitsmentorassign',
       permission: 'canManageTraits',
       color: 'from-orange-500 to-orange-600',
     },
@@ -100,7 +101,7 @@ const Verwaltung = () => {
         ? 'Übersicht und Verwaltung aller verfügbaren Produkte' 
         : 'Overview and management of all available products',
       icon: BarChart3,
-      href: '/verwaltung/all-products',
+      href: '/admin/all-products',
       permission: 'canManageProducts',
       color: 'from-teal-500 to-teal-600',
     },
@@ -110,7 +111,7 @@ const Verwaltung = () => {
         ? 'Neue Produkte erstellen und konfigurieren' 
         : 'Create and configure new products',
       icon: Plus,
-      href: '/verwaltung/create-product',
+      href: '/admin/create-product',
       permission: 'canManageProducts',
       color: 'from-green-700 to-green-900', // darkish green gradient
     },
@@ -124,7 +125,7 @@ const Verwaltung = () => {
         ? 'Benutzerkonten, Rollen und Zugriffsrechte verwalten' 
         : 'Manage user accounts, roles and access permissions',
       icon: ShieldCheck,
-      href: '/verwaltung/accounts',
+      href: '/admin/accounts',
       permission: 'canManageAccounts',
       color: 'from-indigo-500 to-indigo-600',
     },
@@ -134,16 +135,21 @@ const Verwaltung = () => {
         ? 'BYODB / BYOK – Datenbankverbindungen und API-Schlüssel über Cloudflare Secrets Store verwalten'
         : 'BYODB / BYOK – manage database credentials and API keys via Cloudflare Secrets Store',
       icon: Unplug,
-      href: '/verwaltung/connections',
+      href: '/admin/connections',
       permission: 'canManageAccounts',
+      isSuperAdmin: true,
       color: 'from-slate-600 to-slate-800',
     },
   ];
 
   // Filter cards based on permissions
-  const visibleMentorCards = mentorCards.filter(card => permissions[card.permission]);
-  const visibleProductCards = productCards.filter(card => permissions[card.permission]);
-  const visibleAccountCards = accountCards.filter(card => permissions[card.permission]);
+  const visibleMentorCards = mentorCards.filter(card => permissions[card.permission as keyof typeof permissions]);
+  const visibleProductCards = productCards.filter(card => permissions[card.permission as keyof typeof permissions]);
+  const visibleAccountCards = accountCards.filter(card => {
+    const hasPerm = permissions[card.permission as keyof typeof permissions];
+    if (card.isSuperAdmin) return hasPerm && permissions.userRoles.includes('super-admin');
+    return hasPerm;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -193,8 +199,8 @@ const Verwaltung = () => {
                     iconColor={card.color}
                     clickable={true}
                     onClick={() => {
-                      if (card.href === '/verwaltung/create-product') {
-                        navigate(card.href, { state: { from: '/verwaltung' } });
+                      if (card.href === '/admin/create-product') {
+                        navigate(card.href, { state: { from: '/admin' } });
                       } else {
                         navigate(card.href);
                       }
@@ -233,8 +239,8 @@ const Verwaltung = () => {
                     iconColor={card.color}
                     clickable={true}
                     onClick={() => {
-                      if (card.href === '/verwaltung/create-product') {
-                        navigate(card.href, { state: { from: '/verwaltung' } });
+                      if (card.href === '/admin/create-product') {
+                        navigate(card.href, { state: { from: '/admin' } });
                       } else {
                         navigate(card.href);
                       }

@@ -21,7 +21,7 @@ export const MentorSearch: React.FC<MentorSearchProps> = ({
     <div className="relative mb-4">
       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
       <Input
-        placeholder={language === 'en' ? 'Search mentors...' : 'MentorInnen suchen...'}
+        placeholder={language === 'en' ? 'Search staff...' : 'Mitarbeiter suchen...'}
         className="pl-9"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}

@@ -3,9 +3,8 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useNavigate } from "react-router-dom";
-import { Tags } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Tags, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
 
 // Import consistent admin components
 import { AdminPageLayout, AdminCard, AdminLoading } from '@/components/admin/ui';
@@ -13,24 +12,26 @@ import { AddButton, EditButton, DeleteButton, SaveButton, CancelButton } from '@
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  createStaffTrait,
+  deleteStaffTrait,
+  fetchStaffTraits,
+  type StaffTraitDefinition,
+  updateStaffTrait,
+} from '@/services/staffRegistryService';
 
-// Define the type for a trait
-interface MentorGroup {
-  id: number;
-  group_name: string;
-  description: string | null;
-  user_in_group: string[];
-  created_by: string | null;
+interface MetadataEntry {
+  key: string;
+  value: string;
 }
-
-type MentorGroupRow = Omit<MentorGroup, 'user_in_group'> & {
-  user_in_group: string[] | null;
-};
 
 // Define form state
 interface FormState {
   group_name: string;
   description: string;
+  metadataEntries: MetadataEntry[];
 }
 
 const VerwaltungMentorGroups = () => {
@@ -39,16 +40,18 @@ const VerwaltungMentorGroups = () => {
   const permissions = usePermissions();
   const navigate = useNavigate();
   
-  const [groups, setGroups] = useState<MentorGroup[]>([]);
+  const [groups, setGroups] = useState<StaffTraitDefinition[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [currentGroup, setCurrentGroup] = useState<MentorGroup | null>(null);
+  const [currentGroup, setCurrentGroup] = useState<StaffTraitDefinition | null>(null);
   const [showDialog, setShowDialog] = useState(false);
+  const [showAdvancedTraits, setShowAdvancedTraits] = useState(false);
   const [formState, setFormState] = useState<FormState>({
     group_name: '',
-    description: ''
+    description: '',
+    metadataEntries: [],
   });
 
   const hasPermission = permissions.canManageTraits;
@@ -57,18 +60,8 @@ const VerwaltungMentorGroups = () => {
   const fetchGroups = useCallback(async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
-        .from<MentorGroupRow>('mentor_groups')
-        .select('*')
-        .order('group_name', { ascending: true });
-
-      if (error) throw error;
-      setGroups(
-        (data || []).map((group) => ({
-          ...group,
-          user_in_group: Array.isArray(group.user_in_group) ? group.user_in_group : [],
-        }))
-      );
+      const data = await fetchStaffTraits();
+      setGroups(data);
     } catch (error) {
       console.error('Error fetching groups:', error);
       toast.error(language === 'en' ? 'Failed to load traits' : 'Fehler beim Laden der Eigenschaften');
@@ -79,7 +72,7 @@ const VerwaltungMentorGroups = () => {
 
   useEffect(() => {
     if (!hasPermission) {
-      navigate('/verwaltung');
+      navigate('/admin');
       return;
     }
     fetchGroups();
@@ -88,34 +81,35 @@ const VerwaltungMentorGroups = () => {
   // Open create form
   const handleCreateClick = () => {
     setCurrentGroup(null);
-    setFormState({ group_name: '', description: '' });
+    setFormState({ group_name: '', description: '', metadataEntries: [] });
+    setShowAdvancedTraits(false);
     setShowDialog(true);
   };
 
   // Open edit form
-  const handleEditClick = (group: MentorGroup) => {
+  const handleEditClick = (group: StaffTraitDefinition) => {
     setCurrentGroup(group);
     setFormState({
-      group_name: group.group_name,
-      description: group.description || ''
+      group_name: group.name,
+      description: group.description || '',
+      metadataEntries: Object.entries(group.metadata || {}).map(([key, value]) => ({
+        key,
+        value,
+      })),
     });
+    setShowAdvancedTraits(Object.keys(group.metadata || {}).length > 0);
     setShowDialog(true);
   };
 
   // Delete a group
-  const handleDeleteClick = async (group: MentorGroup) => {
+  const handleDeleteClick = async (group: StaffTraitDefinition) => {
     if (!confirm(language === 'en' ? 'Are you sure you want to delete this trait?' : 'Sind Sie sicher, dass Sie diese Eigenschaft löschen möchten?')) {
       return;
     }
 
     try {
       setIsDeleting(true);
-      const { error } = await supabase
-        .from('mentor_groups')
-        .delete()
-        .eq('id', group.id);
-
-      if (error) throw error;
+      await deleteStaffTrait(group.id);
 
       toast.success(language === 'en' ? 'Trait deleted successfully' : 'Eigenschaft erfolgreich gelöscht');
   await fetchGroups();
@@ -134,34 +128,38 @@ const VerwaltungMentorGroups = () => {
       return;
     }
 
+    const metadataEntries = formState.metadataEntries.filter((entry) => entry.key.trim().length > 0);
+    const duplicateKeys = metadataEntries
+      .map((entry) => entry.key.trim())
+      .filter((key, index, allKeys) => allKeys.indexOf(key) !== index);
+
+    if (duplicateKeys.length > 0) {
+      toast.error(language === 'en' ? 'Advanced trait keys must be unique' : 'Erweiterte Eigenschaftsschlüssel müssen eindeutig sein');
+      return;
+    }
+
+    const metadata = metadataEntries.reduce<Record<string, string>>((result, entry) => {
+      result[entry.key.trim()] = entry.value;
+      return result;
+    }, {});
+
     try {
       const saveOperation = currentGroup ? setIsEditing : setIsCreating;
       saveOperation(true);
 
       if (currentGroup) {
-        // Update existing
-        const { error } = await supabase
-          .from('mentor_groups')
-          .update({
-            group_name: formState.group_name.trim(),
-            description: formState.description.trim() || null
-          })
-          .eq('id', currentGroup.id);
-
-        if (error) throw error;
+        await updateStaffTrait(currentGroup.id, {
+          name: formState.group_name.trim(),
+          description: formState.description.trim() || undefined,
+          metadata,
+        });
         toast.success(language === 'en' ? 'Trait updated successfully' : 'Eigenschaft erfolgreich aktualisiert');
       } else {
-        // Create new
-        const { error } = await supabase
-          .from('mentor_groups')
-          .insert({
-            group_name: formState.group_name.trim(),
-            description: formState.description.trim() || null,
-            created_by: user?.id,
-            user_in_group: []
-          });
-
-        if (error) throw error;
+        await createStaffTrait({
+          name: formState.group_name.trim(),
+          description: formState.description.trim() || undefined,
+          metadata,
+        });
         toast.success(language === 'en' ? 'Trait created successfully' : 'Eigenschaft erfolgreich erstellt');
       }
 
@@ -179,13 +177,37 @@ const VerwaltungMentorGroups = () => {
   const handleCancel = () => {
     setShowDialog(false);
     setCurrentGroup(null);
-    setFormState({ group_name: '', description: '' });
+    setFormState({ group_name: '', description: '', metadataEntries: [] });
+    setShowAdvancedTraits(false);
+  };
+
+  const handleMetadataChange = (index: number, field: keyof MetadataEntry, value: string) => {
+    setFormState((prev) => ({
+      ...prev,
+      metadataEntries: prev.metadataEntries.map((entry, entryIndex) =>
+        entryIndex === index ? { ...entry, [field]: value } : entry
+      ),
+    }));
+  };
+
+  const handleAddMetadataEntry = () => {
+    setFormState((prev) => ({
+      ...prev,
+      metadataEntries: [...prev.metadataEntries, { key: '', value: '' }],
+    }));
+  };
+
+  const handleRemoveMetadataEntry = (index: number) => {
+    setFormState((prev) => ({
+      ...prev,
+      metadataEntries: prev.metadataEntries.filter((_, entryIndex) => entryIndex !== index),
+    }));
   };
 
   if (isLoading) {
     return (
       <AdminPageLayout 
-        title={language === 'en' ? 'Mentor Traits' : 'Mentor Eigenschaften'}
+        title={language === 'en' ? 'Staff Traits' : 'Mitarbeiter-Eigenschaften'}
         icon={Tags}
       >
         <AdminLoading language={language} />
@@ -195,10 +217,10 @@ const VerwaltungMentorGroups = () => {
 
   return (
     <AdminPageLayout
-      title={language === 'en' ? 'Mentor Traits' : 'Mentor Eigenschaften'}
+      title={language === 'en' ? 'Staff Traits' : 'Mitarbeiter-Eigenschaften'}
       description={language === 'en' 
-        ? 'Manage and organize mentor traits and categories' 
-        : 'Mentor-Eigenschaften und Kategorien verwalten und organisieren'}
+        ? 'Manage and organize staff traits and metadata' 
+        : 'Mitarbeiter-Eigenschaften und Metadaten verwalten'}
       icon={Tags}
       actions={
         <AddButton onClick={handleCreateClick} disabled={!hasPermission}>
@@ -225,17 +247,23 @@ const VerwaltungMentorGroups = () => {
               <div key={group.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                 <div className="flex-1 min-w-0">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {group.group_name}
+                      {group.name}
                   </h3>
                   {group.description && (
                     <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                       {group.description}
                     </p>
                   )}
-                  <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
-                    {language === 'en' ? 'Members: ' : 'Mitglieder: '}
-                    {Array.isArray(group.user_in_group) ? group.user_in_group.length : 0}
-                  </p>
+                    <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-500 dark:text-gray-500">
+                      <span>
+                        {language === 'en' ? 'Members: ' : 'Mitglieder: '}
+                        {group.assignmentCount || 0}
+                      </span>
+                      <span>
+                        {language === 'en' ? 'Advanced fields: ' : 'Erweiterte Felder: '}
+                        {Object.keys(group.metadata || {}).length}
+                      </span>
+                    </div>
                 </div>
                 
                 <div className="flex items-center gap-2 ml-4">
@@ -297,6 +325,49 @@ const VerwaltungMentorGroups = () => {
                 rows={3}
               />
             </div>
+
+            <Collapsible open={showAdvancedTraits} onOpenChange={setShowAdvancedTraits}>
+              <div className="border rounded-lg">
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="ghost" className="w-full justify-between rounded-none px-3 py-3">
+                    <span>{language === 'en' ? 'Advanced traits' : 'Erweiterte Eigenschaften'}</span>
+                    {showAdvancedTraits ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="space-y-3 border-t px-3 py-3">
+                    <p className="text-sm text-muted-foreground">
+                      {language === 'en'
+                        ? 'Add arbitrary key-value metadata for future plugins and internal organization.'
+                        : 'Fügen Sie beliebige Schlüssel-Wert-Metadaten für zukünftige Plugins und die interne Organisation hinzu.'}
+                    </p>
+
+                    {formState.metadataEntries.map((entry, index) => (
+                      <div key={`${index}-${entry.key}`} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-start">
+                        <Input
+                          value={entry.key}
+                          onChange={(e) => handleMetadataChange(index, 'key', e.target.value)}
+                          placeholder={language === 'en' ? 'Key' : 'Schlüssel'}
+                        />
+                        <Input
+                          value={entry.value}
+                          onChange={(e) => handleMetadataChange(index, 'value', e.target.value)}
+                          placeholder={language === 'en' ? 'Value' : 'Wert'}
+                        />
+                        <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveMetadataEntry(index)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+
+                    <Button type="button" variant="outline" size="sm" onClick={handleAddMetadataEntry} className="gap-2">
+                      <Plus className="h-4 w-4" />
+                      {language === 'en' ? 'Add field' : 'Feld hinzufügen'}
+                    </Button>
+                  </div>
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
           </div>
 
           <div className="flex justify-end gap-3 mt-6">

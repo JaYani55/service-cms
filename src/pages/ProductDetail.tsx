@@ -106,7 +106,7 @@ const ProductDetail = () => {
           {language === 'en' ? 'Product not found' : 'Produkt nicht gefunden'}
         </h2>
         <Button 
-          onClick={() => navigate('/verwaltung/all-products')}
+          onClick={() => navigate('/admin/all-products')}
           size="lg"
           className="text-lg px-6 py-6 h-auto"
         >
@@ -124,7 +124,7 @@ const ProductDetail = () => {
           <Button 
             variant="ghost" 
             size="lg" 
-            onClick={() => navigate('/verwaltung/all-products')}
+            onClick={() => navigate('/admin/all-products')}
             className="text-base"
           >
             <ArrowLeft className="h-5 w-5 mr-2" />

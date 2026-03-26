@@ -256,7 +256,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // 2. Check if user has any of the allowed roles
       const hasValidRole = userRoleNames.some(role => 
-        ['mentor', 'staff', 'super-admin', 'mentoringmanagement'].includes(role)
+        ['user', 'staff', 'admin', 'super-admin'].includes(role)
       );
 
       if (!hasValidRole) {
@@ -267,16 +267,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const profileResult = await authHelpers.fetchUserProfile(session.user.id);
       const employerResult = await authHelpers.fetchEmployerInfo(session.user.id);
 
-      // 4. Determine user's role (priority: super-admin > staff > mentoringmanagement > mentor)
+      // 4. Determine user's role (priority: super-admin > admin > user)
       let userRole = UserRole.GUEST;
       if (userRoleNames.includes('super-admin')) {
         userRole = UserRole.SUPERADMIN;
-      } else if (userRoleNames.includes('staff')) {
-        userRole = UserRole.STAFF;
-      } else if (userRoleNames.includes('mentoringmanagement')) {
-        userRole = UserRole.MENTORINGMANAGEMENT;
-      } else if (userRoleNames.includes('mentor')) {
-        userRole = UserRole.MENTOR;
+      } else if (userRoleNames.includes('admin')) {
+        userRole = UserRole.ADMIN;
+      } else if (userRoleNames.includes('admin')) {
+        userRole = UserRole.ADMIN;
+      } else if (userRoleNames.includes('user') || userRoleNames.includes('staff')) {
+        userRole = UserRole.USER;
       }
 
       // 5. Build and return user object
@@ -428,7 +428,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     // If super-admin, they can switch to any role
     if (state.user.originalRole === UserRole.SUPERADMIN) {
-      return [UserRole.SUPERADMIN, UserRole.STAFF, UserRole.MENTORINGMANAGEMENT, UserRole.MENTOR];
+      return [UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.USER];
     }
     
     // Otherwise, only allow switching between roles the user actually has
@@ -437,14 +437,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         case 'super-admin':
           availableRoles.push(UserRole.SUPERADMIN);
           break;
+        case 'admin':
+          availableRoles.push(UserRole.ADMIN);
+          break;
+        case 'user':
         case 'staff':
-          availableRoles.push(UserRole.STAFF);
-          break;
-        case 'mentoringmanagement':
-          availableRoles.push(UserRole.MENTORINGMANAGEMENT);
-          break;
-        case 'mentor':
-          availableRoles.push(UserRole.MENTOR);
+          availableRoles.push(UserRole.USER);
           break;
       }
     });

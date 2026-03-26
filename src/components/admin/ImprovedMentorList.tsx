@@ -59,8 +59,8 @@ export const ImprovedMentorList: React.FC<ImprovedMentorListProps> = ({
         <div className="text-center p-6">
           <p className="text-muted-foreground">
             {language === 'en' 
-              ? 'You do not have permission to view mentor profiles' 
-              : 'Sie haben keine Berechtigung, Mentor-Profile zu sehen'}
+              ? 'You do not have permission to view staff profiles' 
+              : 'Sie haben keine Berechtigung, Mitarbeiterprofile zu sehen'}
           </p>
         </div>
       </Card>
@@ -73,7 +73,7 @@ export const ImprovedMentorList: React.FC<ImprovedMentorListProps> = ({
         <div className="flex items-center gap-2 mb-4">
           <Users className="h-5 w-5" />
           <h3 className="text-lg font-semibold">
-            {language === 'en' ? 'Mentors' : 'MentorInnen'}
+            {language === 'en' ? 'Staff' : 'Mitarbeiter'}
           </h3>
           <Badge variant="secondary" className="ml-auto">
             {filteredMentors.length} / {mentors.length}
@@ -84,11 +84,11 @@ export const ImprovedMentorList: React.FC<ImprovedMentorListProps> = ({
         <div className="relative mb-3">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder={language === 'en' ? 'Search mentors...' : 'MentorInnen suchen...'}
+            placeholder={language === 'en' ? 'Search staff...' : 'Mitarbeiter suchen...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
-            aria-label={language === 'en' ? 'Search mentors' : 'MentorInnen suchen'}
+            aria-label={language === 'en' ? 'Search staff' : 'Mitarbeiter suchen'}
           />
         </div>
 
@@ -101,7 +101,7 @@ export const ImprovedMentorList: React.FC<ImprovedMentorListProps> = ({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">
-                {language === 'en' ? 'All mentors' : 'Alle MentorInnen'}
+                {language === 'en' ? 'All staff' : 'Alle Mitarbeiter'}
               </SelectItem>
               <SelectItem value="none">
                 {language === 'en' ? 'No traits assigned' : 'Keine Eigenschaften'}
@@ -121,8 +121,8 @@ export const ImprovedMentorList: React.FC<ImprovedMentorListProps> = ({
           {filteredMentors.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               {language === 'en' 
-                ? 'No mentors found' 
-                : 'Keine MentorInnen gefunden'}
+                ? 'No staff found' 
+                : 'Keine Mitarbeiter gefunden'}
             </div>
           ) : (
             filteredMentors.map(mentor => {

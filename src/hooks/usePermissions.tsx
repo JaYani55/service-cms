@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
-import { UserRole } from '@/types/auth';
+import type { AppRole } from '@/types/auth';
 import { useAuth } from '@/contexts/AuthContext';
-import { hasStaffPermissions, isAdministrativeRole } from '@/utils/roleUtils';
 import { Event } from '@/types/event';
 import { isEventInPast } from '@/utils/eventUtils';
 
 export interface Permissions {
+  userRoles: string[];
+
   // Admin permissions
   canManageTraits: boolean;
   canManageMentors: boolean;
@@ -48,91 +49,75 @@ export interface Permissions {
   canMentorViewEvent: (event: { initial_selected_mentors: string[] }) => boolean; // <-- New helper
 
   // Role check
-  hasRole: (role: 'staff' | 'mentor' | 'admin') => boolean;
+  hasRole: (role: AppRole) => boolean;
 }
 
 export const usePermissions = (): Permissions => {
   const { user } = useAuth();
 
   return useMemo(() => {
-    const isAdmin = user?.role === UserRole.SUPERADMIN;
-    const isAdminOrManagement = isAdministrativeRole(user?.role);
-    const hasStaffAccess = hasStaffPermissions(user?.role);
-    const isMentor = user?.role === UserRole.MENTOR;
-    const isMentoringManagement = user?.role === UserRole.MENTORINGMANAGEMENT;
+    const userRoles = user?.roles || [];
+    const isSuperAdmin = userRoles.includes('super-admin');
+    const isAdmin = isSuperAdmin || userRoles.includes('admin');
+    const isUser = isAdmin || userRoles.includes('user') || userRoles.includes('staff');
 
-    const hasRole = (role: 'staff' | 'mentor' | 'admin') => {
+    const hasRole = (role: AppRole) => {
       switch (role) {
-        case 'staff':
-          return hasStaffAccess;
-        case 'mentor':
-          return isMentor;
+        case 'user':
+          return isUser;
         case 'admin':
           return isAdmin;
+        case 'super-admin':
+          return isSuperAdmin;
         default:
           return false;
       }
     };
 
-    // Define your logic for staff profile viewing here:
-    // Example: Only admins and management can view staff profiles
-    const canViewStaffProfiles = isAdminOrManagement || hasStaffAccess;
+    const canViewStaffProfiles = isAdmin;
 
-    // Helper: Only mentors in initial_selected_mentors can view the event
     const canMentorViewEvent = (event: { initial_selected_mentors: string[] }) => {
-      if (!isMentor) return true; // admins/staff see everything
-      if (!event?.initial_selected_mentors || !Array.isArray(event.initial_selected_mentors)) return false;
-      return event.initial_selected_mentors.includes(user?.id);
+      return true;
     };
 
-    // Only require that the current role is mentor
     const canRequestMentor = (event: Event, userId: string) => {
-      if (!userId) return false;
-      const isPast    = isEventInPast(event);
-      const isFull    = (event.acceptedMentors?.length || 0) >= event.amount_requiredmentors;
-      const hasReq    = event.requestingMentors?.includes(userId);
-      const isAcc     = event.acceptedMentors?.includes(userId);
-      const isDecline = event.declinedMentors?.includes(userId);
-      return (
-        !isPast &&
-        !isFull &&
-        !hasReq &&
-        !isAcc &&
-        !isDecline &&
-        isMentor
-      );
+      void event;
+      void userId;
+      return false;
     };
 
     return {
+      userRoles,
+
       // Admin permissions
-      canManageTraits: isAdminOrManagement,
-      canManageMentors: isAdminOrManagement,
-      canManageProducts: hasStaffAccess,
-      canCreateEvents: hasStaffAccess,
-      canDeleteEvents: hasStaffAccess,
-      canEditEvents: hasStaffAccess,
+      canManageTraits: isAdmin,
+      canManageMentors: isAdmin,
+      canManageProducts: isUser,
+      canCreateEvents: isUser,
+      canDeleteEvents: isUser,
+      canEditEvents: isUser,
 
       // View permissions
-      canViewAllProfiles: isAdminOrManagement,
-      canViewMentorProfiles: hasStaffAccess,
+      canViewAllProfiles: isAdmin,
+      canViewMentorProfiles: isUser,
       canViewStaffProfiles,
-      canViewAdminData: isAdmin,
+      canViewAdminData: isSuperAdmin,
       canEditOwnProfile: false, // No one can edit their own profile
-      canEditAnyProfile: isAdminOrManagement, // Only super-admin, admin, mentoringmanagement
-      canEditUsername: isAdminOrManagement,
+      canEditAnyProfile: isAdmin,
+      canEditUsername: isAdmin,
 
       // Event permissions
-      canViewPendingRequests: hasStaffAccess,
-      canProcessMentorRequests: hasStaffAccess,
-      canAssignMentors: isMentoringManagement,
+      canViewPendingRequests: isUser,
+      canProcessMentorRequests: isUser,
+      canAssignMentors: isAdmin,
 
       // Access permissions
-      canAccessVerwaltung: hasStaffAccess,
+      canAccessVerwaltung: isUser,
 
-      // Account administration (super-admin only)
+      // Account administration
       canManageAccounts: isAdmin,
 
-      // Plugin management (super-admin only)
+      // Plugin management
       canManagePlugins: isAdmin,
 
       // Animal icon permissions
@@ -140,8 +125,8 @@ export const usePermissions = (): Permissions => {
 
       // Data access
       getSeaTableView: () => {
+        if (isSuperAdmin) return 'SUPER_ADMIN_VIEW';
         if (isAdmin) return 'ADMIN_VIEW';
-        if (isMentoringManagement) return 'MENTORING_MANAGEMENT_VIEW';
         return 'DEFAULT_VIEW';
       },
 

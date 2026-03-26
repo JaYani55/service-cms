@@ -3,7 +3,6 @@ import { Outlet } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import Navbar from '../ui/Navbar';
 import Breadcrumb from '../navigation/Breadcrumb';
-import { RoleIndicator } from '../ui/RoleIndicator';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
@@ -27,7 +26,6 @@ const Layout = () => {
         
         <header role="banner">
           <Navbar />
-          <RoleIndicator language={language} />
           <Breadcrumb />
         </header>
         
@@ -71,8 +69,6 @@ const Layout = () => {
              <Breadcrumb />
           </div>
         </header>
-        
-        <RoleIndicator language={language} />
         
         <main 
             id="main-content" 

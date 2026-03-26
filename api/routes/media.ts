@@ -37,6 +37,12 @@ type MediaConfig = {
   publicUrlConfigured?: boolean;
 };
 
+function getBearerToken(headerValue: string | undefined): string | undefined {
+  if (!headerValue) return undefined;
+  const match = headerValue.match(/^Bearer\s+(.+)$/i);
+  return match?.[1];
+}
+
 // ── helper: resolve the active storage config ──────────────────────────────
 async function resolveMediaConfig(env: Env): Promise<MediaConfig & { r2PublicUrl: string | null }> {
   const provider = (env.STORAGE_PROVIDER || '') as 'supabase' | 'r2' | '';
@@ -79,6 +85,7 @@ media.get('/config', async (c) => {
 media.get('/list', async (c) => {
   const path = c.req.query('path') ?? '';
   const cfg = await resolveMediaConfig(c.env);
+  const token = getBearerToken(c.req.header('Authorization'));
 
   if (!cfg.configured || cfg.provider === 'unconfigured') {
     return c.json({ error: 'Storage not configured' }, 503);
@@ -112,7 +119,7 @@ media.get('/list', async (c) => {
       return c.json({ items: [...folders, ...files] });
     } else {
       // ── Supabase Storage ────────────────────────────────────────────────
-      const supabase = await createStorageClient(c.env);
+      const supabase = await createStorageClient(c.env, token);
       const bucketName = cfg.bucket!;
 
       // Auto-create bucket if missing — requires admin client (service key).
@@ -133,7 +140,10 @@ media.get('/list', async (c) => {
             }
           }
         } catch (err) {
-          console.error('[Media] Bucket auto-create failed:', err instanceof Error ? err.message : err);
+          const message = err instanceof Error ? err.message : String(err);
+          if (!message.includes('Secret "SUPABASE_SECRET_KEY" not found')) {
+            console.error('[Media] Bucket auto-create failed:', message);
+          }
         }
       }
 
@@ -176,6 +186,7 @@ media.post('/upload', async (c) => {
   if (!cfg.configured || cfg.provider === 'unconfigured') {
     return c.json({ error: 'Storage not configured' }, 503);
   }
+  const token = getBearerToken(c.req.header('Authorization'));
 
   let formData: FormData;
   try {
@@ -201,8 +212,11 @@ media.post('/upload', async (c) => {
       return c.json({ url, path: key });
     } else {
       // ── Supabase Storage ────────────────────────────────────────────────
-      // Use admin client so the server-side worker bypasses RLS on storage.objects.
-      const supabase = await createSupabaseAdminClient(c.env);
+      if (!token) {
+        return c.json({ error: 'Authentication required for media uploads' }, 401);
+      }
+
+      const supabase = await createStorageClient(c.env, token);
       const buf = await file.arrayBuffer();
       const { error } = await supabase.storage
         .from(cfg.bucket!)
@@ -227,13 +241,17 @@ media.delete('/file', async (c) => {
   if (!cfg.configured || cfg.provider === 'unconfigured') {
     return c.json({ error: 'Storage not configured' }, 503);
   }
+  const token = getBearerToken(c.req.header('Authorization'));
 
   try {
     if (cfg.provider === 'r2') {
       await c.env.MEDIA_BUCKET!.delete(path);
     } else {
-      // Use admin client to bypass RLS for server-side deletes.
-      const supabase = await createSupabaseAdminClient(c.env);
+      if (!token) {
+        return c.json({ error: 'Authentication required for media deletes' }, 401);
+      }
+
+      const supabase = await createStorageClient(c.env, token);
       const { error } = await supabase.storage.from(cfg.bucket!).remove([path]);
       if (error) return c.json({ error: error.message }, 500);
     }

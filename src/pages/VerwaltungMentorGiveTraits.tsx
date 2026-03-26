@@ -1,10 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from '@/hooks/usePermissions';
-import { supabase } from "@/lib/supabase";
-import { useData } from "@/contexts/DataContext";
 import { Users, Settings } from "lucide-react";
 import { toast } from "sonner";
 
@@ -14,7 +11,13 @@ import { EditButton } from '@/components/admin/ui';
 
 import { ImprovedMentorList } from "@/components/admin/ImprovedMentorList";
 import { TraitAssignment } from "@/components/admin/TraitAssignment";
-import { fetchMentorGroups, MentorGroup } from "@/services/mentorGroupService";
+import {
+  fetchStaffDirectory,
+  fetchStaffTraitGroupsLegacy,
+  fetchStaffTraits,
+  type LegacyStaffTraitGroup,
+  type StaffTraitDefinition,
+} from '@/services/staffRegistryService';
 
 interface Mentor {
   id: string;
@@ -32,14 +35,12 @@ interface MentorGroupData {
 
 const VerwaltungMentorAdmin = () => {
   const { language } = useTheme();
-  const { user } = useAuth();
   const permissions = usePermissions();
   const navigate = useNavigate();
-  const { getUserProfile } = useData();
 
   const [mentors, setMentors] = useState<Mentor[]>([]);
-  const [groups, setGroups] = useState<MentorGroupData[]>([]);
-  const [availableTraits, setAvailableTraits] = useState<MentorGroup[]>([]);
+  const [groups, setGroups] = useState<LegacyStaffTraitGroup[]>([]);
+  const [availableTraits, setAvailableTraits] = useState<StaffTraitDefinition[]>([]);
   const [isLoadingMentors, setIsLoadingMentors] = useState(true);
   const [isLoadingGroups, setIsLoadingGroups] = useState(true);
   const [selectedMentor, setSelectedMentor] = useState<Mentor | null>(null);
@@ -49,76 +50,34 @@ const VerwaltungMentorAdmin = () => {
   const fetchMentors = useCallback(async () => {
     try {
       setIsLoadingMentors(true);
-      
-      const { data: roleData } = await supabase
-        .from('roles')
-        .select('id')
-        .eq('name', 'mentor')
-        .single();
-
-      if (!roleData?.id) throw new Error('Mentor role not found');
-
-      const { data: userData, error: userError } = await supabase
-        .from('user_roles')
-        .select('user_id')
-        .eq('role_id', roleData.id);
-
-      if (userError) throw userError;
-
-      if (!userData?.length) {
-        setMentors([]);
-        setIsLoadingMentors(false);
-        return;
-      }
-
-      const mentorProfiles = await Promise.all(
-        userData.map(async (item) => {
-          const profile = await getUserProfile(item.user_id);
-          if (profile) {
-            return {
-              id: item.user_id,
-              name: profile.Username || 'Unknown User',
-              profilePic: profile.profile_picture_url,
-              email: profile.email
-            };
-          }
-          return null;
-        })
-      );
-
-      const validProfiles = mentorProfiles
-        .filter(Boolean)
+      const staffRecords = await fetchStaffDirectory();
+      const normalizedStaff = staffRecords
+        .map((staff) => ({
+          id: staff.id,
+          name: staff.displayName || 'Unnamed staff',
+          profilePic: staff.avatarUrl || undefined,
+          email: staff.email || undefined,
+        }))
         .sort((a, b) => a.name.localeCompare(b.name));
 
-      setMentors(validProfiles);
+      setMentors(normalizedStaff);
     } catch (error) {
-      console.error('Error fetching mentors:', error);
+      console.error('Error fetching staff:', error);
       toast.error(
         language === 'en' 
-          ? 'Failed to load mentors' 
-          : 'Fehler beim Laden der MentorInnen'
+          ? 'Failed to load staff' 
+          : 'Fehler beim Laden der Mitarbeiter'
       );
     } finally {
       setIsLoadingMentors(false);
     }
-  }, [getUserProfile, language]);
+  }, [language]);
 
   const fetchGroups = useCallback(async () => {
     try {
       setIsLoadingGroups(true);
-      const { data, error } = await supabase
-        .from('mentor_groups')
-        .select('*')
-        .order('group_name', { ascending: true });
-
-      if (error) throw error;
-      
-      const processedGroups = (data || []).map(group => ({
-        ...group,
-        user_in_group: Array.isArray(group.user_in_group) ? group.user_in_group : []
-      }));
-      
-      setGroups(processedGroups);
+      const data = await fetchStaffTraitGroupsLegacy();
+      setGroups(data);
     } catch (error) {
       console.error('Error fetching groups:', error);
       toast.error(
@@ -132,13 +91,13 @@ const VerwaltungMentorAdmin = () => {
   }, [language]);
 
   const loadAvailableTraits = useCallback(async () => {
-    const traits = await fetchMentorGroups();
+    const traits = await fetchStaffTraits();
     setAvailableTraits(traits);
   }, []);
 
   useEffect(() => {
     if (!hasPermission) {
-      navigate('/verwaltung');
+      navigate('/admin');
       return;
     }
 
@@ -174,10 +133,10 @@ const VerwaltungMentorAdmin = () => {
   if (isLoadingMentors || isLoadingGroups) {
     return (
       <AdminPageLayout
-        title={language === 'en' ? 'Mentor Trait Management' : 'MentorInnen Eigenschaften Verwaltung'}
+        title={language === 'en' ? 'Staff Trait Management' : 'Mitarbeiter-Eigenschaften verwalten'}
         description={language === 'en' 
-          ? 'Assign traits to mentors by clicking on a mentor card.'
-          : 'Weisen Sie MentorInnen Eigenschaften zu, indem Sie auf eine MentorIn-Karte klicken.'}
+          ? 'Assign traits to staff by clicking on a staff card.'
+          : 'Weisen Sie Mitarbeitern Eigenschaften zu, indem Sie auf eine Mitarbeiterkarte klicken.'}
         icon={Users}
       >
         <AdminLoading language={language} />
@@ -187,13 +146,13 @@ const VerwaltungMentorAdmin = () => {
 
   return (
     <AdminPageLayout
-      title={language === 'en' ? 'Mentor Trait Management' : 'MentorInnen Eigenschaften Verwaltung'}
+      title={language === 'en' ? 'Staff Trait Management' : 'Mitarbeiter-Eigenschaften verwalten'}
       description={language === 'en' 
-        ? 'Assign traits to mentors by clicking on a mentor card.'
-        : 'Weisen Sie MentorInnen Eigenschaften zu, indem Sie auf eine MentorIn-Karte klicken.'}
+        ? 'Assign traits to staff by clicking on a staff card.'
+        : 'Weisen Sie Mitarbeitern Eigenschaften zu, indem Sie auf eine Mitarbeiterkarte klicken.'}
       icon={Users}
       actions={
-        <EditButton onClick={() => navigate('/verwaltung/trait')}>
+        <EditButton onClick={() => navigate('/admin/trait')}>
           <Settings className="h-4 w-4 mr-2" />
           {language === 'en' ? 'Manage Traits' : 'Eigenschaften verwalten'}
         </EditButton>
@@ -244,13 +203,13 @@ const VerwaltungMentorAdmin = () => {
                 </div>
                 <h3 className="text-lg font-medium mb-2">
                   {language === 'en' 
-                    ? 'Select a mentor to get started' 
-                    : 'Wählen Sie eine MentorIn aus, um zu beginnen'}
+                    ? 'Select a staff member to get started' 
+                    : 'Wählen Sie einen Mitarbeiter aus, um zu beginnen'}
                 </h3>
                 <p>
                   {language === 'en' 
-                    ? 'Click on any mentor card in the list to assign or modify their traits.' 
-                    : 'Klicken Sie auf eine beliebige MentorIn-Karte in der Liste, um deren Eigenschaften zuzuweisen oder zu ändern.'}
+                    ? 'Click on any staff card in the list to assign or modify their traits.' 
+                    : 'Klicken Sie auf eine beliebige Mitarbeiterkarte in der Liste, um deren Eigenschaften zuzuweisen oder zu ändern.'}
                 </p>
               </div>
             </div>

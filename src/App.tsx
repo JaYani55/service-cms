@@ -209,23 +209,23 @@ const AppContent = () => {
           />
 
           {/* Pages Routes */}
-          <Route path="/pages" element={<ProtectedRoute requiredRole="staff"><Pages /></ProtectedRoute>} />
-          <Route path="/pages/schema/new" element={<ProtectedRoute requiredRole="staff"><SchemaEditor /></ProtectedRoute>} />
-          <Route path="/pages/schema/:schemaSlug" element={<ProtectedRoute requiredRole="staff"><PagesSchemaDetail /></ProtectedRoute>} />
-          <Route path="/pages/schema/:schemaSlug/settings" element={<ProtectedRoute requiredRole="staff"><SchemaEditor /></ProtectedRoute>} />
-          <Route path="/pages/schema/:schemaSlug/new" element={<ProtectedRoute requiredRole="staff"><PageBuilder /></ProtectedRoute>} />
-          <Route path="/pages/schema/:schemaSlug/edit/:pageId" element={<ProtectedRoute requiredRole="staff"><PageBuilder /></ProtectedRoute>} />
+          <Route path="/pages" element={<ProtectedRoute requiredRole="user"><Pages /></ProtectedRoute>} />
+          <Route path="/pages/schema/new" element={<ProtectedRoute requiredRole="user"><SchemaEditor /></ProtectedRoute>} />
+          <Route path="/pages/schema/:schemaSlug" element={<ProtectedRoute requiredRole="user"><PagesSchemaDetail /></ProtectedRoute>} />
+          <Route path="/pages/schema/:schemaSlug/settings" element={<ProtectedRoute requiredRole="user"><SchemaEditor /></ProtectedRoute>} />
+          <Route path="/pages/schema/:schemaSlug/new" element={<ProtectedRoute requiredRole="user"><PageBuilder /></ProtectedRoute>} />
+          <Route path="/pages/schema/:schemaSlug/edit/:pageId" element={<ProtectedRoute requiredRole="user"><PageBuilder /></ProtectedRoute>} />
 
-          {/* Verwaltung Routes */}
-          <Route path="/verwaltung" element={<ProtectedRoute requiredRole="staff"><Verwaltung /></ProtectedRoute>} />
-          <Route path="/verwaltung/accounts" element={<ProtectedRoute requiredRole="admin"><VerwaltungAccounts /></ProtectedRoute>} />
-          <Route path="/verwaltung/connections" element={<ProtectedRoute requiredRole="admin"><VerwaltungConnections /></ProtectedRoute>} />
-          <Route path="/verwaltung/add-mentor" element={<ProtectedRoute requiredRole="staff"><VerwaltungAddMentor /></ProtectedRoute>} />
-          <Route path="/verwaltung/all-mentors" element={<ProtectedRoute requiredRole="staff"><VerwaltungAllMentors /></ProtectedRoute>} />
-          <Route path="/verwaltung/all-products" element={<ProtectedRoute requiredRole="staff"><VerwaltungAllProducts /></ProtectedRoute>} />
-          <Route path="/verwaltung/create-product" element={<ProtectedRoute requiredRole="staff"><VerwaltungCreateProduct /></ProtectedRoute>} />
+          {/* Admin Routes */}
+          <Route path="/admin" element={<ProtectedRoute requiredRole="user"><Verwaltung /></ProtectedRoute>} />
+          <Route path="/admin/accounts" element={<ProtectedRoute requiredRole="admin"><VerwaltungAccounts /></ProtectedRoute>} />
+          <Route path="/admin/connections" element={<ProtectedRoute requiredRole="super-admin"><VerwaltungConnections /></ProtectedRoute>} />
+          <Route path="/admin/add-mentor" element={<ProtectedRoute requiredRole="user"><VerwaltungAddMentor /></ProtectedRoute>} />
+          <Route path="/admin/all-mentors" element={<ProtectedRoute requiredRole="user"><VerwaltungAllMentors /></ProtectedRoute>} />
+          <Route path="/admin/all-products" element={<ProtectedRoute requiredRole="user"><VerwaltungAllProducts /></ProtectedRoute>} />
+          <Route path="/admin/create-product" element={<ProtectedRoute requiredRole="user"><VerwaltungCreateProduct /></ProtectedRoute>} />
           <Route 
-            path="/verwaltung/product/:productId" 
+            path="/admin/product/:productId" 
             element={
               <ProtectedRoute>
                 <ProductDetail />
@@ -233,7 +233,7 @@ const AppContent = () => {
             } 
           />
           <Route 
-            path="/verwaltung/trait" 
+            path="/admin/trait" 
             element={
               <ProtectedRoute>
                 <VerwaltungMentorGroups />
@@ -241,7 +241,7 @@ const AppContent = () => {
             } 
           />
           <Route 
-            path="/verwaltung/traitsmentorassign" 
+            path="/admin/traitsmentorassign" 
             element={
               <ProtectedRoute>
                 <VerwaltungMentorGiveTraits />

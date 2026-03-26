@@ -17,11 +17,11 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       <div className="text-center py-8 text-muted-foreground">
         {searchQuery 
           ? language === 'en' 
-            ? 'No mentors match your search' 
-            : 'Keine MentorInnen entsprechen Ihrer Suche'
+            ? 'No staff match your search' 
+            : 'Keine Mitarbeiter entsprechen Ihrer Suche'
           : language === 'en' 
-            ? 'No mentors available' 
-            : 'Keine MentorInnen verfügbar'
+            ? 'No staff available' 
+            : 'Keine Mitarbeiter verfügbar'
         }
       </div>
     );
@@ -33,8 +33,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         <Users className="h-8 w-8 opacity-70" />
         <p>
           {language === 'en' 
-            ? 'Drop mentors here to assign them this trait' 
-            : 'MentorInnen hier ablegen, um ihnen diese Eigenschaft zuzuordnen'}
+            ? 'Drop staff here to assign them this trait' 
+            : 'Mitarbeiter hier ablegen, um ihnen diese Eigenschaft zuzuordnen'}
         </p>
       </div>
     );

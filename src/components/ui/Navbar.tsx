@@ -31,7 +31,7 @@ const Navbar = () => {
       {
         icon: Settings,
         label: language === "en" ? "Administration" : "Verwaltung",
-        href: "/verwaltung"
+        href: "/admin"
       }
     );
   }

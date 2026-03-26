@@ -22,7 +22,8 @@ export const agentLogger: MiddlewareHandler<{ Bindings: Env }> = async (c, next)
   const path = url.pathname + url.search;
 
   // Skip logging for the logs management endpoints themselves (avoid recursion)
-  if (url.pathname.startsWith('/api/schemas/logs')) {
+  // and for sensitive secrets/connections management to prevent token leaks.
+  if (url.pathname.startsWith('/api/schemas/logs') || url.pathname.startsWith('/api/secrets')) {
     return next();
   }
 

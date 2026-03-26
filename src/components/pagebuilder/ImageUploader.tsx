@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { supabase } from '@/lib/supabase';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,6 +50,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   value,
   onChange,
   previewVariant = 'banner',
+  folder,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -65,10 +67,25 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   const getErrorMessage = (error: unknown) =>
     error instanceof Error ? error.message : 'Unbekannter Fehler.';
 
+  const getAuthHeaders = useCallback(async (): Promise<HeadersInit> => {
+    const { data } = await supabase.auth.getSession();
+    const accessToken = data.session?.access_token;
+
+    if (!accessToken) {
+      return {};
+    }
+
+    return {
+      Authorization: `Bearer ${accessToken}`,
+    };
+  }, []);
+
   const loadMediaLibrary = useCallback(async (path: string = '') => {
     setLoadingMedia(true);
     try {
-      const res = await fetch(`${API_URL}/api/media/list?path=${encodeURIComponent(path)}`);
+      const res = await fetch(`${API_URL}/api/media/list?path=${encodeURIComponent(path)}`, {
+        headers: await getAuthHeaders(),
+      });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
         throw new Error(err.error ?? `HTTP ${res.status}`);
@@ -81,7 +98,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     } finally {
       setLoadingMedia(false);
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   const handleFolderClick = (folderName: string) => {
     const newPath = currentPath ? `${currentPath}/${folderName}` : folderName;
@@ -110,7 +127,11 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
       formData.append('file', new File([''], '.placeholder', { type: 'text/plain' }));
       formData.append('path', folderPath);
 
-      const res = await fetch(`${API_URL}/api/media/upload`, { method: 'POST', body: formData });
+      const res = await fetch(`${API_URL}/api/media/upload`, {
+        method: 'POST',
+        body: formData,
+        headers: await getAuthHeaders(),
+      });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
         throw new Error(err.error ?? `HTTP ${res.status}`);
@@ -140,12 +161,18 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
       if (itemToDelete.isFolder) {
         // List all files inside the folder, then delete them one-by-one via the API
         const folderPath = itemToDelete.path;
-        const listRes = await fetch(`${API_URL}/api/media/list?path=${encodeURIComponent(folderPath)}`);
+        const authHeaders = await getAuthHeaders();
+        const listRes = await fetch(`${API_URL}/api/media/list?path=${encodeURIComponent(folderPath)}`, {
+          headers: authHeaders,
+        });
         if (listRes.ok) {
           const listData = await listRes.json() as { items: MediaItem[] };
           for (const child of listData.items) {
             if (!child.isFolder) {
-              await fetch(`${API_URL}/api/media/file?path=${encodeURIComponent(child.path)}`, { method: 'DELETE' });
+              await fetch(`${API_URL}/api/media/file?path=${encodeURIComponent(child.path)}`, {
+                method: 'DELETE',
+                headers: authHeaders,
+              });
             }
           }
         }
@@ -153,7 +180,10 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
       } else {
         const res = await fetch(
           `${API_URL}/api/media/file?path=${encodeURIComponent(itemToDelete.path)}`,
-          { method: 'DELETE' },
+          {
+            method: 'DELETE',
+            headers: await getAuthHeaders(),
+          },
         );
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
@@ -182,7 +212,11 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
       formData.append('file', file);
       if (currentPath) formData.append('path', currentPath);
 
-      const res = await fetch(`${API_URL}/api/media/upload`, { method: 'POST', body: formData });
+      const res = await fetch(`${API_URL}/api/media/upload`, {
+        method: 'POST',
+        body: formData,
+        headers: await getAuthHeaders(),
+      });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
         throw new Error(err.error ?? `HTTP ${res.status}`);
@@ -199,7 +233,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     } finally {
       setUploading(false);
     }
-  }, [currentPath, onChange]);
+  }, [currentPath, getAuthHeaders, onChange]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -222,10 +256,11 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     if (open) {
       // Sync internal selection with the current committed value
       setSelectedImage(value || null);
-      // Reset to root when opening
-      setCurrentPath('');
+      // Open avatar or feature-specific pickers in their default folder.
+      const initialPath = folder?.replace(/^\/+|\/+$/g, '') || '';
+      setCurrentPath(initialPath);
       setPathHistory([]);
-      void loadMediaLibrary('');
+      void loadMediaLibrary(initialPath);
     }
   };
 

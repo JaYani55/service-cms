@@ -2,10 +2,11 @@ import { useEffect } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
+import type { AppRole } from '@/types/auth';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'staff' | 'mentor' | 'admin';
+  requiredRole?: AppRole;
 }
 
 /**

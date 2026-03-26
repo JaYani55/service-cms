@@ -52,3 +52,12 @@ create policy "admin_delete_roles"
   using (
     (current_setting('request.jwt.claims', true))::jsonb -> 'user_roles' ?| array['super-admin']
   );
+
+insert into public.roles (name, description)
+values
+  ('user', 'Standard application access'),
+  ('staff', 'Legacy staff access; behaves like user'),
+  ('admin', 'Administrative access'),
+  ('super-admin', 'Full administrative access')
+on conflict (name) do update
+set description = excluded.description;

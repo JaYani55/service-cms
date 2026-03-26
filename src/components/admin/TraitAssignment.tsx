@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Loader2, User, Tags, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { MentorGroup, updateMentorTraits, getMentorTraits } from '@/services/mentorGroupService';
+import { StaffTraitDefinition, updateStaffTraits, getStaffTraits } from '@/services/staffRegistryService';
 import { usePermissions } from '@/hooks/usePermissions';
 // Import our consistent admin components
 import { AdminCard, AdminLoading } from '@/components/admin/ui';
@@ -20,7 +20,7 @@ interface Mentor {
 
 interface TraitAssignmentProps {
   mentor: Mentor;
-  availableTraits: MentorGroup[];
+  availableTraits: StaffTraitDefinition[];
   language: 'en' | 'de';
   onClose: () => void;
   onUpdate: () => void;
@@ -45,7 +45,7 @@ export const TraitAssignment: React.FC<TraitAssignmentProps> = ({
   useEffect(() => {
     const loadMentorTraits = async () => {
       setIsLoading(true);
-      const traits = await getMentorTraits(mentor.id);
+      const traits = await getStaffTraits(mentor.id);
       setSelectedTraits(traits);
       setOriginalTraits(traits);
       setIsLoading(false);
@@ -67,7 +67,7 @@ export const TraitAssignment: React.FC<TraitAssignmentProps> = ({
     
     setIsSaving(true);
     
-    const success = await updateMentorTraits(mentor.id, selectedTraits);
+    const success = await updateStaffTraits(mentor.id, selectedTraits);
     
     if (success) {
       toast.success(
@@ -102,7 +102,7 @@ export const TraitAssignment: React.FC<TraitAssignmentProps> = ({
   );
 
   if (isLoading) {
-    return <AdminLoading language={language} message={language === 'en' ? 'Loading mentor traits...' : 'Lade Mentor-Eigenschaften...'} />;
+    return <AdminLoading language={language} message={language === 'en' ? 'Loading staff traits...' : 'Lade Mitarbeiter-Eigenschaften...'} />;
   }
 
   if (!canManageTraits) {

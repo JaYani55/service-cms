@@ -157,10 +157,10 @@ const VerwaltungConnections: React.FC = () => {
 
   // Redirect if insufficient permissions
   useEffect(() => {
-    if (!permissions.canManageAccounts) {
-      navigate('/verwaltung');
+    if (!permissions.canManageAccounts || !permissions.userRoles.includes('super-admin')) {
+      navigate('/admin');
     }
-  }, [permissions.canManageAccounts, navigate]);
+  }, [permissions.canManageAccounts, permissions.userRoles, navigate]);
 
   const loadSecrets = useCallback(async () => {
     setLoading(true);
@@ -298,7 +298,7 @@ const VerwaltungConnections: React.FC = () => {
 
         {/* ── Header ── */}
         <div className="flex items-start gap-4">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/verwaltung')} className="mt-1">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} className="mt-1">
             <ArrowLeft className="h-4 w-4 mr-1" />
             Zurück
           </Button>

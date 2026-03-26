@@ -65,7 +65,7 @@ export const GroupTabs = ({
         </p>
         <Button 
           className="mt-4" 
-          onClick={() => navigate('/verwaltung/trait')}
+          onClick={() => navigate('/admin/trait')}
         >
           {language === 'en' 
             ? 'Create traits' 
@@ -86,7 +86,7 @@ export const GroupTabs = ({
         <Button 
           variant="outline"
           size="sm"
-          onClick={() => navigate('/verwaltung/trait')}
+          onClick={() => navigate('/admin/trait')}
         >
           {language === 'en' ? 'Manage Traits' : 'Eigenschaften verwalten'}
         </Button>

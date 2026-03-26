@@ -19,7 +19,7 @@ const VerwaltungCreateProduct = () => {
 
   React.useEffect(() => {
     if (!permissions.canManageProducts) {
-      navigate('/verwaltung');
+      navigate('/admin');
     }
   }, [permissions.canManageProducts, navigate]);
 
@@ -35,19 +35,19 @@ const VerwaltungCreateProduct = () => {
     if (referrer) {
       try {
         const referrerPath = new URL(referrer).pathname;
-        if (referrerPath.includes('/verwaltung/all-products')) {
-          return '/verwaltung/all-products';
+        if (referrerPath.includes('/admin/all-products')) {
+          return '/admin/all-products';
         }
-        if (referrerPath.includes('/verwaltung')) {
-          return '/verwaltung';
+        if (referrerPath.includes('/admin')) {
+          return '/admin';
         }
       } catch (e) {
         // If URL parsing fails, use default
       }
     }
     
-    // Default fallback to verwaltung
-    return '/verwaltung';
+    // Default fallback to admin
+    return '/admin';
   };
 
   const backPath = getBackPath();
@@ -62,7 +62,7 @@ const VerwaltungCreateProduct = () => {
   };
 
   const getBackButtonLabel = () => {
-    if (backPath === '/verwaltung/all-products') {
+    if (backPath === '/admin/all-products') {
       return language === 'en' ? 'Back to Products' : 'Zurück zu Produkten';
     }
     return language === 'en' ? 'Back to Administration' : 'Zurück zur Verwaltung';

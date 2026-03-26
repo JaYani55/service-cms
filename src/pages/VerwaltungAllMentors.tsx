@@ -3,8 +3,13 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { usePermissions } from '@/hooks/usePermissions';
 import { useNavigate } from "react-router-dom";
 import { Users } from 'lucide-react';
-import { fetchMentorGroups, MentorGroup } from '@/services/mentorGroupService';
-import { supabase } from '@/lib/supabase';
+import {
+  fetchStaffDirectory,
+  fetchStaffTraitGroupsLegacy,
+  fetchStaffTraits,
+  type LegacyStaffTraitGroup,
+  type StaffTraitDefinition,
+} from '@/services/staffRegistryService';
 
 // Import consistent admin components
 import { AdminPageLayout, AdminLoading, AdminCard } from '@/components/admin/ui';
@@ -25,14 +30,15 @@ const VerwaltungAllMentors = () => {
   const navigate = useNavigate();
   
   const [mentors, setMentors] = useState<Mentor[]>([]);
-  const [availableTraits, setAvailableTraits] = useState<MentorGroup[]>([]);
+  const [availableTraits, setAvailableTraits] = useState<StaffTraitDefinition[]>([]);
+  const [traitGroups, setTraitGroups] = useState<LegacyStaffTraitGroup[]>([]);
   const [selectedMentor, setSelectedMentor] = useState<Mentor | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Check permissions and redirect if needed
   useEffect(() => {
     if (!permissions.canViewMentorProfiles) {
-      navigate('/verwaltung');
+      navigate('/admin');
     }
   }, [permissions.canViewMentorProfiles, navigate]);
 
@@ -42,58 +48,19 @@ const VerwaltungAllMentors = () => {
       try {
         setIsLoading(true);
 
-        // Step 1: Get mentor role ID
-        const { data: roleData, error: roleError } = await supabase
-          .from('roles')
-          .select('id')
-          .eq('name', 'mentor')
-          .single();
-
-        if (roleError || !roleData) {
-          console.error('Error fetching mentor role:', roleError);
-          setMentors([]);
-          return;
-        }
-
-        // Step 2: Get all user IDs with mentor role
-        const { data: userRolesData, error: userRolesError } = await supabase
-          .from('user_roles')
-          .select('user_id')
-          .eq('role_id', roleData.id);
-
-        if (userRolesError || !userRolesData?.length) {
-          console.error('Error fetching user roles:', userRolesError);
-          setMentors([]);
-          return;
-        }
-
-        const mentorUserIds = userRolesData.map(item => item.user_id);
-
-        // Step 3: Batch fetch all mentor profiles at once
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('user_profile')
-          .select('user_id, Username, pfp_url')
-          .in('user_id', mentorUserIds)
-          .order('Username');
-
-        if (profilesError) {
-          console.error('Error fetching profiles:', profilesError);
-          setMentors([]);
-          return;
-        }
-
-        // Step 4: Transform data for UI
-        const processedMentors: Mentor[] = (profilesData || []).map(profile => ({
-          id: profile.user_id,
-          name: profile.Username || 'No Username given',
-          profilePic: profile.pfp_url || undefined
+        const staffRecords = await fetchStaffDirectory();
+        const processedMentors: Mentor[] = staffRecords.map((staff) => ({
+          id: staff.id,
+          name: staff.displayName || 'No Username given',
+          email: staff.email || undefined,
+          profilePic: staff.avatarUrl || undefined,
         }));
 
         setMentors(processedMentors);
-        console.log(`[VerwaltungAllMentors] Loaded ${processedMentors.length} mentors`);
+        console.log(`[VerwaltungAllMentors] Loaded ${processedMentors.length} staff records`);
 
       } catch (error) {
-        console.error('Error loading mentors:', error);
+        console.error('Error loading staff:', error);
         setMentors([]);
       } finally {
         setIsLoading(false);
@@ -107,11 +74,16 @@ const VerwaltungAllMentors = () => {
   useEffect(() => {
     const loadTraits = async () => {
       try {
-        const traits = await fetchMentorGroups();
+        const [traits, groups] = await Promise.all([
+          fetchStaffTraits(),
+          fetchStaffTraitGroupsLegacy(),
+        ]);
         setAvailableTraits(traits);
+        setTraitGroups(groups);
       } catch (error) {
         console.error('Error loading traits:', error);
         setAvailableTraits([]);
+        setTraitGroups([]);
       }
     };
 
@@ -126,19 +98,14 @@ const VerwaltungAllMentors = () => {
 
   // FIX: This function was using wrong property - should use 'members' not 'memberCount'
   const getMentorGroups = (mentorId: string): string[] => {
-    return availableTraits
-      .filter(trait => {
-        // Use 'members' array, not 'memberCount' (which is a number)
-        const members = trait.members || [];
-        return Array.isArray(members) && members.includes(mentorId);
-      })
-      .map(trait => trait.name);
+    return traitGroups
+      .filter(trait => trait.user_in_group.includes(mentorId))
+      .map(trait => trait.group_name);
   };
 
   // FIX: Navigate to mentor profile instead of opening trait assignment
   const handleEditMentor = (mentor: Mentor) => {
-    // Navigate to the mentor's profile page
-    navigate(`/profile/${mentor.id}`);
+    navigate(`/admin/add-mentor?edit=${mentor.id}`);
   };
 
   // Keep trait assignment for when we implement it properly
@@ -167,7 +134,7 @@ const VerwaltungAllMentors = () => {
   if (isLoading) {
     return (
       <AdminPageLayout
-        title={language === 'en' ? 'All Mentors' : 'Alle MentorInnen'}
+        title={language === 'en' ? 'All Staff' : 'Alle Mitarbeiter'}
         icon={Users}
       >
         <AdminLoading language={language} />
@@ -177,15 +144,15 @@ const VerwaltungAllMentors = () => {
 
   return (
     <AdminPageLayout
-      title={language === 'en' ? 'All Mentors' : 'Alle MentorInnen'}
+      title={language === 'en' ? 'All Staff' : 'Alle Mitarbeiter'}
       description={language === 'en' 
-        ? 'Overview and management of all registered mentors' 
-        : 'Übersicht und Verwaltung aller registrierten MentorInnen'}
+        ? 'Overview and management of all registered staff' 
+        : 'Übersicht und Verwaltung aller registrierten Mitarbeiter'}
       icon={Users}
       actions={
         canManageMentors && (
-          <AddButton onClick={() => navigate('/verwaltung/add-mentor')}>
-            {language === 'en' ? 'Add Mentor' : 'Mentor hinzufügen'}
+          <AddButton onClick={() => navigate('/admin/add-mentor')}>
+            {language === 'en' ? 'Add Staff' : 'Mitarbeiter hinzufügen'}
           </AddButton>
         )
       }
@@ -195,16 +162,16 @@ const VerwaltungAllMentors = () => {
           <div className="text-center py-12">
             <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-medium mb-2">
-              {language === 'en' ? 'No mentors found' : 'Keine MentorInnen gefunden'}
+              {language === 'en' ? 'No staff found' : 'Keine Mitarbeiter gefunden'}
             </h3>
             <p className="text-muted-foreground mb-4">
               {language === 'en' 
-                ? 'There are no mentors registered yet.' 
-                : 'Es sind noch keine MentorInnen registriert.'}
+                ? 'There are no staff members registered yet.' 
+                : 'Es sind noch keine Mitarbeiter registriert.'}
             </p>
             {canManageMentors && (
-              <AddButton onClick={() => navigate('/verwaltung/add-mentor')}>
-                {language === 'en' ? 'Add First Mentor' : 'Erste MentorIn hinzufügen'}
+              <AddButton onClick={() => navigate('/admin/add-mentor')}>
+                {language === 'en' ? 'Add First Staff Member' : 'Ersten Mitarbeiter hinzufügen'}
               </AddButton>
             )}
           </div>
@@ -216,7 +183,7 @@ const VerwaltungAllMentors = () => {
           language={language}
           getInitials={getInitials}
           getMentorGroups={getMentorGroups}
-          onEditMentor={handleEditMentor} // This now navigates to profile
+          onEditMentor={handleEditMentor}
         />
       )}
 

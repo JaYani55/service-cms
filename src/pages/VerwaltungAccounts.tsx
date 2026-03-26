@@ -5,9 +5,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   fetchRoles,
   fetchAccounts,
-  createRole,
-  updateRole,
-  deleteRole,
   assignRole,
   removeRole,
   createAccount,
@@ -53,8 +50,6 @@ import {
   Shield,
   UserPlus,
   Plus,
-  Trash2,
-  Pencil,
   Users,
   ShieldCheck,
   Loader2,
@@ -105,22 +100,16 @@ const VerwaltungAccounts: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'accounts' | 'roles'>('accounts');
 
   // Dialog states
-  const [showCreateRole, setShowCreateRole] = useState(false);
-  const [showEditRole, setShowEditRole] = useState(false);
-  const [showDeleteRole, setShowDeleteRole] = useState(false);
   const [showCreateAccount, setShowCreateAccount] = useState(false);
   const [showAssignRole, setShowAssignRole] = useState(false);
 
   // Selected items
-  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [selectedUser, setSelectedUser] = useState<AccountUser | null>(null);
 
   // Expanded user cards
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
 
   // Form states
-  const [newRoleName, setNewRoleName] = useState('');
-  const [newRoleDescription, setNewRoleDescription] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newUsername, setNewUsername] = useState('');
@@ -153,67 +142,11 @@ const VerwaltungAccounts: React.FC = () => {
 
   useEffect(() => {
     if (!permissions.canManageAccounts) {
-      navigate('/verwaltung');
+      navigate('/admin');
       return;
     }
     loadData();
   }, [permissions.canManageAccounts, navigate, loadData]);
-
-  // ─── Role CRUD Handlers ─────────────────────────────────────────
-
-  const handleCreateRole = async () => {
-    if (!newRoleName.trim()) return;
-    setSubmitting(true);
-    try {
-      await createRole({ name: newRoleName.trim(), description: newRoleDescription.trim() || undefined });
-      toast.success(de ? 'Rolle erstellt' : 'Role created');
-      setShowCreateRole(false);
-      setNewRoleName('');
-      setNewRoleDescription('');
-      await loadData();
-    } catch (err: unknown) {
-      toast.error(getErrorMessage(err, de ? 'Fehler beim Erstellen' : 'Error creating role'));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleUpdateRole = async () => {
-    if (!selectedRole || !newRoleName.trim()) return;
-    setSubmitting(true);
-    try {
-      await updateRole(selectedRole.id, {
-        name: newRoleName.trim(),
-        description: newRoleDescription.trim() || undefined,
-      });
-      toast.success(de ? 'Rolle aktualisiert' : 'Role updated');
-      setShowEditRole(false);
-      setSelectedRole(null);
-      setNewRoleName('');
-      setNewRoleDescription('');
-      await loadData();
-    } catch (err: unknown) {
-      toast.error(getErrorMessage(err, de ? 'Fehler beim Aktualisieren' : 'Error updating role'));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDeleteRole = async () => {
-    if (!selectedRole) return;
-    setSubmitting(true);
-    try {
-      await deleteRole(selectedRole.id);
-      toast.success(de ? 'Rolle gelöscht' : 'Role deleted');
-      setShowDeleteRole(false);
-      setSelectedRole(null);
-      await loadData();
-    } catch (err: unknown) {
-      toast.error(getErrorMessage(err, de ? 'Fehler beim Löschen' : 'Error deleting role'));
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   // ─── Account Creation Handler ───────────────────────────────────
 
@@ -281,18 +214,6 @@ const VerwaltungAccounts: React.FC = () => {
     });
   };
 
-  const openEditRole = (role: Role) => {
-    setSelectedRole(role);
-    setNewRoleName(role.name);
-    setNewRoleDescription(role.description || '');
-    setShowEditRole(true);
-  };
-
-  const openDeleteRole = (role: Role) => {
-    setSelectedRole(role);
-    setShowDeleteRole(true);
-  };
-
   const openAssignRole = (user: AccountUser) => {
     setSelectedUser(user);
     setAssignRoleId('');
@@ -340,7 +261,7 @@ const VerwaltungAccounts: React.FC = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate('/verwaltung')}
+            onClick={() => navigate('/admin')}
             className="mb-4 text-gray-600 dark:text-gray-400"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -632,56 +553,6 @@ const VerwaltungAccounts: React.FC = () => {
         {/* ═══ ROLES TAB ═══ */}
         {activeTab === 'roles' && (
           <div className="space-y-6">
-            {/* Actions Bar */}
-            <div className="flex justify-end">
-              <Dialog open={showCreateRole} onOpenChange={setShowCreateRole}>
-                <DialogTrigger asChild>
-                  <Button className="gap-2 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700">
-                    <Plus className="h-4 w-4" />
-                    {de ? 'Neue Rolle erstellen' : 'Create New Role'}
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>{de ? 'Neue Rolle erstellen' : 'Create New Role'}</DialogTitle>
-                    <DialogDescription>
-                      {de
-                        ? 'Definieren Sie eine neue Rolle für die Zugriffskontrolle.'
-                        : 'Define a new role for access control.'}
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label>{de ? 'Rollenname' : 'Role Name'} *</Label>
-                      <Input
-                        placeholder={de ? 'z.B. editor, viewer' : 'e.g. editor, viewer'}
-                        value={newRoleName}
-                        onChange={(e) => setNewRoleName(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>{de ? 'Beschreibung' : 'Description'}</Label>
-                      <Textarea
-                        placeholder={de ? 'Beschreibung der Rolle...' : 'Role description...'}
-                        value={newRoleDescription}
-                        onChange={(e) => setNewRoleDescription(e.target.value)}
-                        rows={3}
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowCreateRole(false)}>
-                      {de ? 'Abbrechen' : 'Cancel'}
-                    </Button>
-                    <Button onClick={handleCreateRole} disabled={submitting || !newRoleName.trim()}>
-                      {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      {de ? 'Erstellen' : 'Create'}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-
             {/* Roles Grid */}
             {roles.length === 0 ? (
               <Card className="border-0 shadow-sm">
@@ -713,26 +584,6 @@ const VerwaltungAccounts: React.FC = () => {
                             </div>
                             <CardTitle className="text-lg">{role.name}</CardTitle>
                           </div>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => openEditRole(role)}
-                              title={de ? 'Bearbeiten' : 'Edit'}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                              onClick={() => openDeleteRole(role)}
-                              title={de ? 'Löschen' : 'Delete'}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
                         </div>
                       </CardHeader>
                       <CardContent>
@@ -763,70 +614,6 @@ const VerwaltungAccounts: React.FC = () => {
       </div>
 
       {/* ═══ DIALOGS ═══ */}
-
-      {/* Edit Role Dialog */}
-      <Dialog open={showEditRole} onOpenChange={setShowEditRole}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{de ? 'Rolle bearbeiten' : 'Edit Role'}</DialogTitle>
-            <DialogDescription>
-              {de ? 'Rollendetails aktualisieren.' : 'Update role details.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>{de ? 'Rollenname' : 'Role Name'} *</Label>
-              <Input
-                value={newRoleName}
-                onChange={(e) => setNewRoleName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>{de ? 'Beschreibung' : 'Description'}</Label>
-              <Textarea
-                value={newRoleDescription}
-                onChange={(e) => setNewRoleDescription(e.target.value)}
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditRole(false)}>
-              {de ? 'Abbrechen' : 'Cancel'}
-            </Button>
-            <Button onClick={handleUpdateRole} disabled={submitting || !newRoleName.trim()}>
-              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {de ? 'Speichern' : 'Save'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Role Confirmation */}
-      <AlertDialog open={showDeleteRole} onOpenChange={setShowDeleteRole}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {de ? 'Rolle löschen?' : 'Delete Role?'}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {de
-                ? `Die Rolle "${selectedRole?.name}" wird unwiderruflich gelöscht. Alle Benutzerzuweisungen werden ebenfalls entfernt.`
-                : `The role "${selectedRole?.name}" will be permanently deleted. All user assignments will also be removed.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{de ? 'Abbrechen' : 'Cancel'}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteRole}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {de ? 'Löschen' : 'Delete'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Assign Role Dialog */}
       <Dialog open={showAssignRole} onOpenChange={setShowAssignRole}>

@@ -1,8 +1,13 @@
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 
+export type AppRole = 'user' | 'admin' | 'super-admin';
+
 // Enums instead of type for better type safety
 export enum UserRole {
   GUEST = 'guest',
+  USER = 'user',
+  ADMIN = 'admin',
+  // Legacy values remain for compatibility with older feature code.
   MENTOR = 'mentor',
   COACH = 'coach', // Keep for backward compatibility - cosmetic only
   STAFF = 'staff', // New role with actual permissions
