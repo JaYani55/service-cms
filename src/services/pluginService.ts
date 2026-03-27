@@ -2,8 +2,19 @@ import { supabase } from '@/lib/supabase';
 import type {
   PluginConfigFieldDefinition,
   PluginRegistration,
+  PluginRegistrationKind,
   PluginRegistrationInsert,
 } from '@/types/plugin';
+
+function normalizePluginRecord(record: PluginRegistration): PluginRegistration {
+  return {
+    ...record,
+    kind: record.kind ?? 'plugin',
+    repo_url: record.repo_url ?? null,
+    external_url: record.external_url ?? null,
+    icon_url: record.icon_url ?? null,
+  };
+}
 
 export function isSecretPluginField(field: PluginConfigFieldDefinition): boolean {
   return field.type === 'secret';
@@ -66,6 +77,22 @@ export function filterPluginConfigValues(
   );
 }
 
+export function isWebappRegistration(plugin: Pick<PluginRegistration, 'kind'>): boolean {
+  return plugin.kind === 'webapp';
+}
+
+export function getPluginLink(plugin: Pick<PluginRegistration, 'kind' | 'repo_url' | 'external_url'>): string | null {
+  if (plugin.kind === 'webapp') {
+    return plugin.external_url ?? null;
+  }
+
+  return plugin.repo_url ?? null;
+}
+
+export function getPluginLinkLabel(kind: PluginRegistrationKind): string {
+  return kind === 'webapp' ? 'Webapp öffnen' : 'Repository';
+}
+
 /** Fetch all plugin records from the database. */
 export async function fetchPlugins(): Promise<PluginRegistration[]> {
   const { data, error } = await supabase
@@ -77,7 +104,23 @@ export async function fetchPlugins(): Promise<PluginRegistration[]> {
     console.error('[pluginService] fetchPlugins error:', error);
     throw error;
   }
-  return (data ?? []) as PluginRegistration[];
+  return ((data ?? []) as PluginRegistration[]).map(normalizePluginRecord);
+}
+
+export async function fetchEnabledWebapps(): Promise<PluginRegistration[]> {
+  const { data, error } = await supabase
+    .from('plugins')
+    .select('*')
+    .eq('kind', 'webapp')
+    .eq('status', 'enabled')
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error('[pluginService] fetchEnabledWebapps error:', error);
+    throw error;
+  }
+
+  return ((data ?? []) as PluginRegistration[]).map(normalizePluginRecord);
 }
 
 /** Register a new plugin entry in the database. */
@@ -99,7 +142,7 @@ export async function registerPlugin(
     console.error('[pluginService] registerPlugin error:', error);
     throw error;
   }
-  return data as PluginRegistration;
+  return normalizePluginRecord(data as PluginRegistration);
 }
 
 /**

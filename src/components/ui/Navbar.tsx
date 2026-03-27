@@ -2,7 +2,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTheme } from "../../contexts/ThemeContext";
 import { usePermissions } from '@/hooks/usePermissions';
-import { Moon, Sun, Menu, Calendar, Users, List, X, Settings, LogOut, HelpCircle, SlidersHorizontal, FileText } from "lucide-react";
+import { useEnabledWebapps } from '@/hooks/useEnabledWebapps';
+import { Moon, Sun, Menu, Calendar, Users, List, X, Settings, LogOut, HelpCircle, SlidersHorizontal, FileText, Globe } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import Logo from "../shared/Logo";
@@ -11,6 +12,7 @@ const Navbar = () => {
   const { logout, user } = useAuth();
   const { theme, language, toggleTheme } = useTheme();
   const { canAccessVerwaltung } = usePermissions(); // Use centralized permission
+  const { webapps } = useEnabledWebapps();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
 
@@ -36,6 +38,8 @@ const Navbar = () => {
     );
   }
 
+  const webappItems = webapps;
+
   const toggleMobileMenu = () => setMobileMenuOpen(!mobileMenuOpen);
 
   return (
@@ -60,6 +64,24 @@ const Navbar = () => {
                   <span>{item.label}</span>
                 </div>
               </Link>
+            ))}
+            {webappItems.map((item) => (
+              <a
+                key={item.id}
+                href={item.external_url ?? '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="nav-button"
+              >
+                <div className="flex items-center space-x-1">
+                  {item.icon_url ? (
+                    <img src={item.icon_url} alt="" className="h-4 w-4 rounded-sm object-contain" />
+                  ) : (
+                    <Globe className="h-4 w-4" />
+                  )}
+                  <span>{item.name}</span>
+                </div>
+              </a>
             ))}
           </div>
 
@@ -132,6 +154,23 @@ const Navbar = () => {
                 <item.icon className="h-5 w-5 mr-2" />
                 <span>{item.label}</span>
               </Link>
+            ))}
+            {webappItems.map((item) => (
+              <a
+                key={item.id}
+                href={item.external_url ?? '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center px-3 py-3 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                {item.icon_url ? (
+                  <img src={item.icon_url} alt="" className="h-5 w-5 mr-2 rounded-sm object-contain" />
+                ) : (
+                  <Globe className="h-5 w-5 mr-2" />
+                )}
+                <span>{item.name}</span>
+              </a>
             ))}
             
             {user && (

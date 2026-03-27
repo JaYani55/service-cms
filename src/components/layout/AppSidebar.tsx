@@ -1,8 +1,9 @@
-import { Calendar, Settings, Users, User, List, LogOut, HelpCircle, Moon, Sun, ChevronUp, FileText, SlidersHorizontal, Puzzle } from "lucide-react"
+import { Calendar, Settings, Users, User, List, LogOut, HelpCircle, Moon, Sun, ChevronUp, FileText, SlidersHorizontal, Puzzle, Globe } from "lucide-react"
 import { useLocation, Link } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import { usePermissions } from "@/hooks/usePermissions"
+import { useEnabledWebapps } from "@/hooks/useEnabledWebapps"
 import { getPluginSidebarItems } from "@/plugins/loader"
 import Logo from "@/components/shared/Logo"
 import {
@@ -30,6 +31,7 @@ export function AppSidebar() {
   const { logout, user } = useAuth()
   const { theme, language, toggleTheme } = useTheme()
   const { canAccessVerwaltung, canManagePlugins } = usePermissions()
+  const { webapps } = useEnabledWebapps()
   const location = useLocation()
 
   const items = [
@@ -84,6 +86,7 @@ export function AppSidebar() {
 
   // Dynamic sidebar items from installed plugins (main group — visible to all authenticated users)
   const pluginMainItems = getPluginSidebarItems('main');
+  const webappItems = webapps;
 
   return (
     <Sidebar collapsible="icon">
@@ -112,6 +115,20 @@ export function AppSidebar() {
                       <item.icon />
                       <span>{item.title}</span>
                     </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+              {webappItems.map((item) => (
+                <SidebarMenuItem key={item.id}>
+                  <SidebarMenuButton asChild tooltip={item.name}>
+                    <a href={item.external_url ?? '#'} target="_blank" rel="noopener noreferrer">
+                      {item.icon_url ? (
+                        <img src={item.icon_url} alt="" className="h-4 w-4 rounded-sm object-contain" />
+                      ) : (
+                        <Globe />
+                      )}
+                      <span>{item.name}</span>
+                    </a>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}

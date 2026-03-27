@@ -4,5 +4,6 @@ export const QUERY_KEYS = {
   USER_PROFILE: 'user-profile',       // Individual user profile data
   SEATABLE_MENTORS: 'seatable-mentors',  // Replace PROFILE_EXTENSIONS with this
   EMPLOYER: 'employer',
-  PRODUCTS: 'products'
+  PRODUCTS: 'products',
+  WEBAPPS: 'webapps'
 };

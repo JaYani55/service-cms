@@ -73,6 +73,8 @@ export interface PluginConfigFieldDefinition {
   expose_to_frontend?: boolean;
 }
 
+export type PluginRegistrationKind = 'plugin' | 'webapp';
+
 // ─── Route ───────────────────────────────────────────────────────────────────
 /** A page route contributed by a plugin. */
 export interface PluginRoute {
@@ -160,6 +162,7 @@ export interface PluginDefinition {
 /** Mirrors the public.plugins DB table. */
 export interface PluginRegistration {
   id: string;
+  kind: PluginRegistrationKind;
   slug: string;
   name: string;
   version: string;
@@ -167,8 +170,10 @@ export interface PluginRegistration {
   author_name: string | null;
   author_url: string | null;
   license: string | null;
-  repo_url: string;
+  repo_url: string | null;
   download_url: string | null;
+  external_url: string | null;
+  icon_url: string | null;
   status: 'registered' | 'installed' | 'enabled' | 'disabled' | 'error';
   config: Record<string, string>;
   config_schema: PluginConfigFieldDefinition[];

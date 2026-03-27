@@ -16,6 +16,7 @@ import {
   Shield,
   ShieldCheck,
   ShieldAlert,
+  Globe,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -44,11 +45,15 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
+import { ImageUploader } from '@/components/pagebuilder/ImageUploader';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   buildPluginSecretName,
   fetchPlugins,
   filterPluginConfigValues,
+  getPluginLink,
+  getPluginLinkLabel,
+  isWebappRegistration,
   isSecretPluginField,
   registerPlugin,
   updatePluginConfig,
@@ -86,6 +91,45 @@ function getErrorMessage(error: unknown, fallback: string): string {
   }
 
   return fallback;
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function buildWebappSlug(name: string, externalUrl: string, manualSlug?: string): string {
+  const trimmedManualSlug = manualSlug?.trim();
+  if (trimmedManualSlug) {
+    return slugify(trimmedManualSlug);
+  }
+
+  try {
+    const url = new URL(externalUrl);
+    const pathPart = url.pathname.replace(/^\/|\/$/g, '').replace(/\//g, '-');
+    const derivedFromUrl = slugify(`${url.hostname}-${pathPart}`);
+
+    if (derivedFromUrl) {
+      return derivedFromUrl;
+    }
+  } catch {
+    // Validation is handled separately. Fall back to the display name.
+  }
+
+  return slugify(name);
 }
 
 function parseConfigSchemaJson(raw: string): PluginConfigFieldDefinition[] {
@@ -145,6 +189,17 @@ export default function Plugins() {
   });
   const [registerSaving, setRegisterSaving] = useState(false);
 
+  // Register webapp dialog
+  const [registerWebappOpen, setRegisterWebappOpen] = useState(false);
+  const [registerWebappSaving, setRegisterWebappSaving] = useState(false);
+  const [webappForm, setWebappForm] = useState({
+    name: '',
+    slug: '',
+    description: '',
+    external_url: '',
+    icon_url: '',
+  });
+
   // Config dialog
   const [configPlugin, setConfigPlugin] = useState<PluginRegistration | null>(null);
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
@@ -187,13 +242,10 @@ export default function Plugins() {
   // ── Auto-slug from repo URL ────────────────────────────────────────────────
   const handleRepoUrlChange = (url: string) => {
     setRegisterForm((f) => {
-      const slug = url
+      const slug = slugify(url
         .replace(/^https?:\/\/(www\.)?github\.com\//i, '')
         .replace(/\//g, '-')
-        .replace(/[^a-z0-9-]/gi, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '')
-        .toLowerCase();
+      );
       return { ...f, repo_url: url, slug: f.slug || slug };
     });
   };
@@ -216,6 +268,7 @@ export default function Plugins() {
     setRegisterSaving(true);
     try {
       await registerPlugin({
+        kind: 'plugin',
         slug:         registerForm.slug.trim(),
         name:         registerForm.name.trim(),
         version:      registerForm.version.trim() || '0.0.0',
@@ -225,6 +278,8 @@ export default function Plugins() {
         license:      registerForm.license.trim() || null,
         repo_url:     registerForm.repo_url.trim(),
         download_url: registerForm.download_url.trim() || null,
+        external_url: null,
+        icon_url: null,
         config_schema: configSchema,
       });
       toast.success('Plugin registriert');
@@ -235,6 +290,63 @@ export default function Plugins() {
       toast.error(getErrorMessage(err, 'Registrierung fehlgeschlagen'));
     } finally {
       setRegisterSaving(false);
+    }
+  };
+
+  const handleRegisterWebapp = async () => {
+    if (!webappForm.name.trim() || !webappForm.external_url.trim()) {
+      toast.error('Name und Webapp-URL sind Pflichtfelder.');
+      return;
+    }
+
+    if (!isValidHttpUrl(webappForm.external_url.trim())) {
+      toast.error('Bitte gib eine gültige http(s)-URL an.');
+      return;
+    }
+
+    const resolvedSlug = buildWebappSlug(
+      webappForm.name,
+      webappForm.external_url,
+      webappForm.slug,
+    );
+
+    if (!resolvedSlug) {
+      toast.error('Es konnte kein gueltiger interner Slug erzeugt werden.');
+      return;
+    }
+
+    setRegisterWebappSaving(true);
+    try {
+      await registerPlugin({
+        kind: 'webapp',
+        slug: resolvedSlug,
+        name: webappForm.name.trim(),
+        version: 'external',
+        description: webappForm.description.trim() || null,
+        author_name: null,
+        author_url: null,
+        license: null,
+        repo_url: null,
+        download_url: null,
+        external_url: webappForm.external_url.trim(),
+        icon_url: webappForm.icon_url.trim() || null,
+        status: 'enabled',
+        config_schema: [],
+      });
+      toast.success('Webapp registriert');
+      setRegisterWebappOpen(false);
+      setWebappForm({
+        name: '',
+        slug: '',
+        description: '',
+        external_url: '',
+        icon_url: '',
+      });
+      loadPlugins();
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Webapp konnte nicht registriert werden'));
+    } finally {
+      setRegisterWebappSaving(false);
     }
   };
 
@@ -332,7 +444,7 @@ export default function Plugins() {
     const next = plugin.status === 'enabled' ? 'disabled' : 'enabled';
     try {
       await updatePluginStatus(plugin.id, next);
-      toast.success(next === 'enabled' ? 'Plugin aktiviert' : 'Plugin deaktiviert');
+      toast.success(next === 'enabled' ? 'Eintrag aktiviert' : 'Eintrag deaktiviert');
       loadPlugins();
     } catch {
       toast.error('Status konnte nicht geändert werden');
@@ -345,11 +457,11 @@ export default function Plugins() {
     setDeleting(true);
     try {
       await deletePlugin(deleteTarget.id);
-      toast.success('Plugin entfernt');
+      toast.success('Eintrag entfernt');
       setDeleteTarget(null);
       loadPlugins();
     } catch {
-      toast.error('Plugin konnte nicht entfernt werden');
+      toast.error('Eintrag konnte nicht entfernt werden');
     } finally {
       setDeleting(false);
     }
@@ -381,6 +493,10 @@ export default function Plugins() {
             <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
             Aktualisieren
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setRegisterWebappOpen(true)}>
+            <Globe className="h-4 w-4 mr-2" />
+            Webapp registrieren
+          </Button>
           <Button size="sm" onClick={() => setRegisterOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Plugin registrieren
@@ -392,11 +508,9 @@ export default function Plugins() {
       <Alert>
         <Info className="h-4 w-4" />
         <AlertDescription>
-          <strong>Workflow:</strong> Plugin hier registrieren → <code>plugins.json</code> aktualisieren →{' '}
-          <code>node scripts/install-plugins.mjs</code> ausführen → neu bauen und deployen.
-          Registrierte Plugins werden erst nach einem Neustart der Anwendung aktiv.
-          Konfigurationswerte und Secrets werden danach separat im Plugin-Dialog gepflegt.
-          Siehe <strong>docs/Plugin_Development.md</strong> für das vollständige Plugin-Entwicklungshandbuch.
+          <strong>Workflow:</strong> Plugins werden hier registriert und anschliessend per <code>plugins.json</code>,{' '}
+          <code>node scripts/install-plugins.mjs</code>, Build und Deploy aktiviert. Webapps werden direkt als externer
+          Navigationspunkt gespeichert und erscheinen nach dem Aktivieren automatisch in Navbar und Sidebar.
         </AlertDescription>
       </Alert>
 
@@ -420,11 +534,17 @@ export default function Plugins() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 gap-4 text-center">
             <Puzzle className="h-12 w-12 text-muted-foreground/40" />
-            <p className="text-muted-foreground">Keine Plugins registriert.</p>
-            <Button onClick={() => setRegisterOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Erstes Plugin registrieren
-            </Button>
+            <p className="text-muted-foreground">Keine Plugins oder Webapps registriert.</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button onClick={() => setRegisterOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Erstes Plugin registrieren
+              </Button>
+              <Button variant="outline" onClick={() => setRegisterWebappOpen(true)}>
+                <Globe className="h-4 w-4 mr-2" />
+                Erste Webapp registrieren
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -433,14 +553,97 @@ export default function Plugins() {
             <PluginCard
               key={plugin.id}
               plugin={plugin}
-              isActive={runtimePlugins.some((r) => r.id === plugin.slug)}
-              onConfig={() => openConfig(plugin)}
+              isActive={!isWebappRegistration(plugin) && runtimePlugins.some((r) => r.id === plugin.slug)}
+              onConfig={isWebappRegistration(plugin) ? undefined : () => openConfig(plugin)}
               onToggle={() => handleToggleStatus(plugin)}
               onDelete={() => setDeleteTarget(plugin)}
             />
           ))}
         </div>
       )}
+
+      {/* ── Register webapp dialog ── */}
+      <Dialog open={registerWebappOpen} onOpenChange={setRegisterWebappOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Neue Webapp registrieren</DialogTitle>
+            <DialogDescription>
+              Registriere eine externe Anwendung als Navigationspunkt. Die Webapp wird als externer Link in Navbar und Sidebar angezeigt.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <Label htmlFor="webapp-name">Name *</Label>
+              <Input
+                id="webapp-name"
+                placeholder="Mentor Portal"
+                value={webappForm.name}
+                onChange={(e) => setWebappForm((current) => ({ ...current, name: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="webapp-slug">Slug <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                <Input
+                  id="webapp-slug"
+                  placeholder="Automatisch aus URL oder Name"
+                  value={webappForm.slug}
+                  onChange={(e) => setWebappForm((current) => ({ ...current, slug: slugify(e.target.value) }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="webapp-url">Webapp-URL *</Label>
+                <Input
+                  id="webapp-url"
+                  type="url"
+                  placeholder="https://app.example.com"
+                  value={webappForm.external_url}
+                  onChange={(e) => setWebappForm((current) => ({ ...current, external_url: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="webapp-description">Beschreibung</Label>
+              <Input
+                id="webapp-description"
+                placeholder="Externe Anwendung fuer Staff oder Mentoren"
+                value={webappForm.description}
+                onChange={(e) => setWebappForm((current) => ({ ...current, description: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Webapp-Icon</Label>
+              <ImageUploader
+                value={webappForm.icon_url}
+                onChange={(url) => setWebappForm((current) => ({ ...current, icon_url: url }))}
+                previewVariant="avatar"
+                folder="webapps/icons"
+              />
+              <Input
+                type="url"
+                placeholder="Oder Icon-URL direkt einfuegen"
+                value={webappForm.icon_url}
+                onChange={(e) => setWebappForm((current) => ({ ...current, icon_url: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Du kannst ein Icon aus der Mediathek waehlen oder eine direkte Bild-URL eintragen.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Tipp: <a href="https://dashboardicons.com/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">https://dashboardicons.com/</a> ist eine gute Quelle fuer passende Icons.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRegisterWebappOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button onClick={handleRegisterWebapp} disabled={registerWebappSaving}>
+              {registerWebappSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Webapp registrieren
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Register dialog ── */}
       <Dialog open={registerOpen} onOpenChange={setRegisterOpen}>
@@ -727,10 +930,11 @@ export default function Plugins() {
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Plugin entfernen?</AlertDialogTitle>
+            <AlertDialogTitle>{deleteTarget && isWebappRegistration(deleteTarget) ? 'Webapp entfernen?' : 'Plugin entfernen?'}</AlertDialogTitle>
             <AlertDialogDescription>
-              Dies entfernt den Datenbankeintrag für <strong>{deleteTarget?.name}</strong>. Installierte Dateien in{' '}
-              <code>src/plugins/{deleteTarget?.slug}/</code> bleiben erhalten und müssen manuell gelöscht werden.
+              {deleteTarget && isWebappRegistration(deleteTarget)
+                ? <>Dies entfernt den Datenbankeintrag für <strong>{deleteTarget.name}</strong> und entfernt den Navigationspunkt aus der Anwendung.</>
+                : <>Dies entfernt den Datenbankeintrag für <strong>{deleteTarget?.name}</strong>. Installierte Dateien in <code>src/plugins/{deleteTarget?.slug}/</code> bleiben erhalten und müssen manuell gelöscht werden.</>}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -754,35 +958,52 @@ export default function Plugins() {
 interface PluginCardProps {
   plugin: PluginRegistration;
   isActive: boolean;
-  onConfig: () => void;
+  onConfig?: () => void;
   onToggle: () => void;
   onDelete: () => void;
 }
 
 function PluginCard({ plugin, isActive, onConfig, onToggle, onDelete }: PluginCardProps) {
+  const isWebapp = isWebappRegistration(plugin);
   const badge = STATUS_BADGE[plugin.status] ?? STATUS_BADGE.registered;
   const schemaFields = getPluginSchemaFields(plugin);
   const secretCount = schemaFields.filter((field) => isSecretPluginField(field)).length;
   const publicCount = schemaFields.length - secretCount;
+  const link = getPluginLink(plugin);
+  const linkLabel = getPluginLinkLabel(plugin.kind);
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            {isActive ? (
+            {isWebapp ? (
+              plugin.icon_url ? (
+                <img
+                  src={plugin.icon_url}
+                  alt=""
+                  className="h-5 w-5 shrink-0 rounded-sm object-contain"
+                />
+              ) : (
+                <Globe className="h-5 w-5 text-primary shrink-0" />
+              )
+            ) : isActive ? (
               <PackageCheck className="h-5 w-5 text-green-500 shrink-0" />
             ) : (
               <PackageX className="h-5 w-5 text-muted-foreground shrink-0" />
             )}
             <div className="min-w-0">
               <CardTitle className="text-base truncate">{plugin.name}</CardTitle>
-              <p className="text-xs font-mono text-muted-foreground">{plugin.slug} · v{plugin.version}</p>
+              <p className="text-xs font-mono text-muted-foreground">
+                {plugin.slug}
+                {!isWebapp ? ` · v${plugin.version}` : ''}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <Badge variant="outline">{isWebapp ? 'Webapp' : 'Plugin'}</Badge>
             <Badge variant={badge.variant}>{badge.label}</Badge>
-            {isActive && (
+            {!isWebapp && isActive && (
               <Badge variant="outline" className="text-green-600 border-green-600">
                 Geladen
               </Badge>
@@ -798,7 +1019,8 @@ function PluginCard({ plugin, isActive, onConfig, onToggle, onDelete }: PluginCa
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {plugin.author_name && <span>Autor: {plugin.author_name}</span>}
           {plugin.license && <span>Lizenz: {plugin.license}</span>}
-          {schemaFields.length > 0 && <span>Schema: {publicCount} Variablen · {secretCount} Secrets</span>}
+          {!isWebapp && schemaFields.length > 0 && <span>Schema: {publicCount} Variablen · {secretCount} Secrets</span>}
+          {isWebapp && plugin.external_url && <span className="font-mono">{plugin.external_url}</span>}
           {plugin.installed_at && (
             <span>Installiert: {new Date(plugin.installed_at).toLocaleDateString('de-DE')}</span>
           )}
@@ -814,20 +1036,30 @@ function PluginCard({ plugin, isActive, onConfig, onToggle, onDelete }: PluginCa
         <Separator />
 
         <div className="flex flex-wrap gap-2">
-          <a
-            href={plugin.repo_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-normal transition-colors hover:bg-accent hover:text-accent-foreground"
-          >
-            <Github className="h-4 w-4" />
-            Repository
-            <ExternalLink className="h-3 w-3" />
-          </a>
-          <Button variant="outline" size="sm" onClick={onConfig}>
-            <Settings2 className="h-4 w-4 mr-1.5" />
-            Konfiguration
-          </Button>
+          {link && (
+            <a
+              href={link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-normal transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              {isWebapp ? (
+                plugin.icon_url ? (
+                  <img src={plugin.icon_url} alt="" className="h-4 w-4 rounded-sm object-contain" />
+                ) : (
+                  <Globe className="h-4 w-4" />
+                )
+              ) : <Github className="h-4 w-4" />}
+              {linkLabel}
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+          {!isWebapp && onConfig && (
+            <Button variant="outline" size="sm" onClick={onConfig}>
+              <Settings2 className="h-4 w-4 mr-1.5" />
+              Konfiguration
+            </Button>
+          )}
           {plugin.status === 'installed' || plugin.status === 'enabled' || plugin.status === 'disabled' ? (
             <Button
               variant="outline"
