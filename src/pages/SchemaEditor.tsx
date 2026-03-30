@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Loader2, Eye, Save, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader2, Eye, Save, ChevronDown, ChevronUp, FileJson, AlertTriangle, CheckCircle2, Info, Upload } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   createSchema,
   updateSchema,
@@ -21,7 +22,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
 import { SCHEMA_TEMPLATES, type SchemaTemplate } from '@/config/schemaTemplates';
 
-const FIELD_TYPES = ['string', 'number', 'boolean', 'array', 'object', 'ContentBlock[]', 'media', 'string[]'] as const;
+const FIELD_TYPES = ['string', 'number', 'boolean', 'array', 'object', 'ContentBlock[]', 'media'] as const;
+const VALID_SCHEMA_TYPES = new Set<string>(FIELD_TYPES);
 
 const emptyField = (): SchemaFieldDefinition => ({
   name: '',
@@ -31,6 +33,209 @@ const emptyField = (): SchemaFieldDefinition => ({
   meta_description: '',
   required: false,
 });
+
+interface SchemaJsonParseResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  fields: SchemaFieldDefinition[];
+  normalizedSchema: Record<string, unknown> | null;
+}
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+};
+
+const validateOptionalString = (
+  value: unknown,
+  path: string,
+  label: string,
+  errors: string[],
+): string | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') {
+    errors.push(`${path}.${label} must be a string.`);
+    return undefined;
+  }
+  return value;
+};
+
+const validateOptionalBoolean = (
+  value: unknown,
+  path: string,
+  label: string,
+  errors: string[],
+): boolean | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'boolean') {
+    errors.push(`${path}.${label} must be true or false.`);
+    return undefined;
+  }
+  return value;
+};
+
+const parseSchemaFieldEntry = (
+  fieldName: string,
+  value: unknown,
+  path: string,
+): { field: SchemaFieldDefinition | null; errors: string[]; warnings: string[] } => {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!fieldName.trim()) {
+    errors.push(`${path} field name must not be empty.`);
+    return { field: null, errors, warnings };
+  }
+
+  if (!isPlainObject(value)) {
+    errors.push(`${path} must be an object with at least a valid type.`);
+    return { field: null, errors, warnings };
+  }
+
+  const rawType = value.type;
+  if (typeof rawType !== 'string' || rawType.trim() === '') {
+    errors.push(`${path}.type is required and must be a string.`);
+    return { field: null, errors, warnings };
+  }
+
+  let normalizedType = rawType;
+  if (rawType === 'string[]') {
+    normalizedType = 'array';
+    warnings.push(`${path}.type "string[]" was normalized to "array" with string items.`);
+  }
+
+  if (!VALID_SCHEMA_TYPES.has(normalizedType)) {
+    errors.push(
+      `${path}.type must be one of: ${Array.from(VALID_SCHEMA_TYPES).join(', ')}. Received: ${rawType}.`
+    );
+    return { field: null, errors, warnings };
+  }
+
+  const field: SchemaFieldDefinition = {
+    name: fieldName,
+    type: normalizedType as SchemaFieldDefinition['type'],
+    description: validateOptionalString(value.description, path, 'description', errors),
+    placeholder: validateOptionalString(value.placeholder, path, 'placeholder', errors),
+    meta_description: validateOptionalString(value.meta_description, path, 'meta_description', errors),
+    required: validateOptionalBoolean(value.required, path, 'required', errors) ?? false,
+  };
+
+  if (value.enum !== undefined) {
+    if (!Array.isArray(value.enum) || value.enum.some((entry) => typeof entry !== 'string')) {
+      errors.push(`${path}.enum must be an array of strings.`);
+    } else if (field.type !== 'string' && field.type !== 'media') {
+      errors.push(`${path}.enum is only supported for string or media fields.`);
+    } else {
+      field.enum = value.enum;
+    }
+  }
+
+  if (field.type === 'object') {
+    if (value.properties === undefined) {
+      field.properties = [];
+    } else if (!isPlainObject(value.properties)) {
+      errors.push(`${path}.properties must be an object whose keys are nested field names.`);
+    } else {
+      const nestedFields: SchemaFieldDefinition[] = [];
+      for (const [nestedName, nestedValue] of Object.entries(value.properties)) {
+        const nestedResult = parseSchemaFieldEntry(nestedName, nestedValue, `${path}.properties.${nestedName}`);
+        errors.push(...nestedResult.errors);
+        warnings.push(...nestedResult.warnings);
+        if (nestedResult.field) {
+          nestedFields.push(nestedResult.field);
+        }
+      }
+      field.properties = nestedFields;
+    }
+  } else if (value.properties !== undefined) {
+    errors.push(`${path}.properties is only allowed for object fields.`);
+  }
+
+  if (field.type === 'array') {
+    if (rawType === 'string[]') {
+      field.items = {
+        name: 'item',
+        type: 'string',
+        description: '',
+        placeholder: '',
+        meta_description: '',
+        required: false,
+      };
+    } else if (value.items === undefined) {
+      errors.push(`${path}.items is required for array fields.`);
+    } else {
+      const itemResult = parseSchemaFieldEntry('item', value.items, `${path}.items`);
+      errors.push(...itemResult.errors);
+      warnings.push(...itemResult.warnings);
+      if (itemResult.field) {
+        field.items = itemResult.field;
+      }
+    }
+  } else if (value.items !== undefined) {
+    errors.push(`${path}.items is only allowed for array fields.`);
+  }
+
+  return { field, errors, warnings };
+};
+
+const parseSchemaJsonDefinition = (raw: string): SchemaJsonParseResult => {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return {
+      valid: false,
+      errors: [],
+      warnings: [],
+      fields: [],
+      normalizedSchema: null,
+    };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (error) {
+    return {
+      valid: false,
+      errors: [error instanceof Error ? error.message : 'Invalid JSON.'],
+      warnings: [],
+      fields: [],
+      normalizedSchema: null,
+    };
+  }
+
+  if (!isPlainObject(parsed)) {
+    return {
+      valid: false,
+      errors: ['The schema definition must be a JSON object at the root.'],
+      warnings: [],
+      fields: [],
+      normalizedSchema: null,
+    };
+  }
+
+  const fields: SchemaFieldDefinition[] = [];
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  for (const [fieldName, fieldValue] of Object.entries(parsed)) {
+    const result = parseSchemaFieldEntry(fieldName, fieldValue, fieldName);
+    errors.push(...result.errors);
+    warnings.push(...result.warnings);
+    if (result.field) {
+      fields.push(result.field);
+    }
+  }
+
+  const normalizedSchema = errors.length === 0 ? fieldsToJsonSchema(fields) : null;
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+    fields,
+    normalizedSchema,
+  };
+};
 
 const fieldsToJsonSchema = (fields: SchemaFieldDefinition[]): Record<string, unknown> => {
   const result: Record<string, unknown> = {};
@@ -271,6 +476,8 @@ const SchemaEditor: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [existingSchema, setExistingSchema] = useState<PageSchema | null>(null);
+  const [schemaJsonInput, setSchemaJsonInput] = useState('');
+  const [schemaJsonResult, setSchemaJsonResult] = useState<SchemaJsonParseResult | null>(null);
 
   useEffect(() => {
     if (isEditing && schemaSlug) {
@@ -350,6 +557,29 @@ const SchemaEditor: React.FC = () => {
     toast.info(language === 'en'
       ? `Template "${template.name}" applied`
       : `Vorlage "${template.nameDe}" angewendet`);
+  };
+
+  const handleSchemaJsonChange = (value: string) => {
+    setSchemaJsonInput(value);
+    if (!value.trim()) {
+      setSchemaJsonResult(null);
+      return;
+    }
+    setSchemaJsonResult(parseSchemaJsonDefinition(value));
+  };
+
+  const loadCurrentSchemaIntoParser = () => {
+    const current = JSON.stringify(generatedSchema, null, 2);
+    setSchemaJsonInput(current);
+    setSchemaJsonResult(parseSchemaJsonDefinition(current));
+  };
+
+  const applyParsedSchemaToEditor = () => {
+    if (!schemaJsonResult?.valid) {
+      return;
+    }
+    setFields(schemaJsonResult.fields);
+    toast.success(language === 'en' ? 'JSON schema loaded into the editor' : 'JSON-Schema in den Editor geladen');
   };
 
   if (isLoading) {
@@ -481,6 +711,134 @@ const SchemaEditor: React.FC = () => {
             <Plus className="h-4 w-4 mr-2" />
             {language === 'en' ? 'Add Field' : 'Feld hinzufügen'}
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileJson className="h-5 w-5" />
+            <span>{language === 'en' ? 'Schema JSON Parser' : 'Schema-JSON-Parser'}</span>
+          </CardTitle>
+          <CardDescription>
+            {language === 'en'
+              ? 'Paste a schema JSON object to define fields in bulk. The parser validates types, nested structures, and legacy aliases before loading the result into the editor.'
+              : 'Füge ein Schema-JSON-Objekt ein, um Felder gesammelt zu definieren. Der Parser validiert Typen, verschachtelte Strukturen und Legacy-Aliase, bevor das Ergebnis in den Editor geladen wird.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={loadCurrentSchemaIntoParser}>
+              <Eye className="h-4 w-4 mr-2" />
+              {language === 'en' ? 'Load Current Schema JSON' : 'Aktuelles Schema-JSON laden'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={applyParsedSchemaToEditor}
+              disabled={!schemaJsonResult?.valid}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              {language === 'en' ? 'Load into Field Editor' : 'In Feld-Editor laden'}
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="schema-json-input" className="text-base font-semibold">
+              {language === 'en' ? 'Schema Definition JSON' : 'Schema-Definitions-JSON'}
+            </Label>
+            <Textarea
+              id="schema-json-input"
+              value={schemaJsonInput}
+              onChange={(e) => handleSchemaJsonChange(e.target.value)}
+              rows={14}
+              spellCheck={false}
+              className={`font-mono text-sm ${
+                !schemaJsonInput.trim()
+                  ? ''
+                  : schemaJsonResult?.valid
+                    ? 'border-green-500'
+                    : 'border-destructive'
+              }`}
+              placeholder={`{
+  "title": {
+    "type": "string",
+    "description": "Main page heading",
+    "required": true
+  },
+  "gallery": {
+    "type": "array",
+    "items": {
+      "type": "media"
+    }
+  }
+}`}
+            />
+            <div className="flex items-center gap-2 min-h-[1.5rem]">
+              {!schemaJsonInput.trim() && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Info className="h-3 w-3" />
+                  {language === 'en'
+                    ? 'Paste a JSON object with field definitions to validate it live.'
+                    : 'Füge ein JSON-Objekt mit Felddefinitionen ein, um es live zu validieren.'}
+                </span>
+              )}
+              {schemaJsonInput.trim() && schemaJsonResult?.valid && (
+                <Badge variant="outline" className="text-green-700 border-green-400 dark:text-green-400 gap-1 text-xs">
+                  <CheckCircle2 className="h-3 w-3" />
+                  {language === 'en' ? 'Valid schema JSON' : 'Gültiges Schema-JSON'}
+                </Badge>
+              )}
+              {schemaJsonInput.trim() && schemaJsonResult && !schemaJsonResult.valid && (
+                <Badge variant="destructive" className="gap-1 text-xs">
+                  <AlertTriangle className="h-3 w-3" />
+                  {schemaJsonResult.errors.length === 1
+                    ? (language === 'en' ? '1 error' : '1 Fehler')
+                    : language === 'en'
+                      ? `${schemaJsonResult.errors.length} errors`
+                      : `${schemaJsonResult.errors.length} Fehler`}
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          {schemaJsonResult && (schemaJsonResult.errors.length > 0 || schemaJsonResult.warnings.length > 0) && (
+            <Alert variant={schemaJsonResult.errors.length > 0 ? 'destructive' : 'default'}>
+              {schemaJsonResult.errors.length > 0 ? (
+                <AlertTriangle className="h-4 w-4" />
+              ) : (
+                <Info className="h-4 w-4" />
+              )}
+              <AlertTitle>
+                {schemaJsonResult.errors.length > 0
+                  ? (language === 'en' ? 'Parser feedback' : 'Parser-Feedback')
+                  : (language === 'en' ? 'Warnings' : 'Warnungen')}
+              </AlertTitle>
+              <AlertDescription>
+                <div className="space-y-2">
+                  {schemaJsonResult.errors.map((error, index) => (
+                    <p key={`schema-json-error-${index}`} className="text-sm">{error}</p>
+                  ))}
+                  {schemaJsonResult.warnings.map((warning, index) => (
+                    <p key={`schema-json-warning-${index}`} className="text-sm text-amber-700 dark:text-amber-400">
+                      {warning}
+                    </p>
+                  ))}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {schemaJsonResult?.normalizedSchema && (
+            <div className="space-y-2">
+              <Label className="text-base font-semibold">
+                {language === 'en' ? 'Normalized Parsed Schema' : 'Normalisiertes geparstes Schema'}
+              </Label>
+              <pre className="bg-muted p-4 rounded-lg text-sm overflow-auto max-h-80 font-mono">
+                {JSON.stringify(schemaJsonResult.normalizedSchema, null, 2)}
+              </pre>
+            </div>
+          )}
         </CardContent>
       </Card>
 

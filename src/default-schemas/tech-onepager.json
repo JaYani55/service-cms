@@ -1,0 +1,111 @@
+{
+  "hero": {
+    "type": "object",
+    "description": "The primary 'above-the-fold' section of the landing page",
+    "meta_description": "The most critical conversion section. Includes a punchy H1 headline that focuses on a 'Stop [Problem]. Start [Solution]' framework. The description should be technical yet benefit-driven. Includes primary and secondary call-to-action buttons. AI should focus on high-energy, authoritative language.",
+    "properties": {
+      "headline": {
+        "type": "string",
+        "meta_description": "The main H1. Should use a bold, two-part structure (e.g., 'Stop just storing content. Start coordinating your business.'). Max 12 words."
+      },
+      "subheadline": {
+        "type": "ContentBlock[]",
+        "meta_description": "A 2-3 sentence paragraph explaining the 'How' and 'Who'. Mention target audience (e.g., 'high-performance service providers') and key technical differentiators."
+      },
+      "media": {
+        "type": "media",
+        "meta_description": "A high-fidelity visual representing the product. For technical products, this should be an abstract 'aura' graphic, a dashboard preview, or a code-snippet visualization."
+      },
+      "primaryCTA": {
+        "type": "object",
+        "properties": {
+          "label": { "type": "string", "meta_description": "Action-oriented text like 'Get Started' or 'Install Now'." },
+          "link": { "type": "string" }
+        }
+      },
+      "secondaryCTA": {
+        "type": "object",
+        "properties": {
+          "label": { "type": "string", "meta_description": "Lower-friction action like 'View on GitHub' or 'Book Demo'." },
+          "link": { "type": "string" }
+        }
+      }
+    }
+  },
+  "valueProps": {
+    "type": "array",
+    "description": "A grid of core feature/benefit cards",
+    "meta_description": "A set of 3 cards highlighting the 'Engineered for...' philosophy. Each card should focus on a distinct pillar (e.g., Design, Commerce, Developer Experience). AI should generate an icon name, a title, and 3 specific bullet points for each.",
+    "items": {
+      "type": "object",
+      "properties": {
+        "icon": {
+          "type": "string",
+          "meta_description": "Lucide icon name that semantically matches the pillar (e.g., 'zap', 'shield', 'code')."
+        },
+        "title": {
+          "type": "string",
+          "meta_description": "Short, punchy pillar title (e.g., 'Agentic by Design')."
+        },
+        "bulletPoints": {
+          "type": "string[]",
+          "meta_description": "Exactly 3 bullet points per card. Each should start with a strong verb or adjective and highlight a specific technical capability."
+        }
+      }
+    }
+  },
+  "technicalSpecs": {
+    "type": "object",
+    "description": "A structured table for technical transparency and trust",
+    "meta_description": "A table layout intended for 'Reliable Enterprise Scaling'. Lists technical capabilities against specific technologies. AI should populate this with industry-standard stacks relevant to the product (e.g., Edge-native, SQL, React).",
+    "properties": {
+      "sectionTitle": { "type": "string", "default": "Technical Specifications" },
+      "rows": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "capability": { "type": "string", "meta_description": "The feature name (e.g., 'Protocol Support', 'Database')." },
+            "specification": { "type": "string", "meta_description": "The specific technology or standard used (e.g., 'MCP / REST / GraphQL')." },
+            "supportedBy": { "type": "string", "meta_description": "The provider or underlying engine (e.g., 'Native Agent Communication', 'Supabase')." }
+          }
+        }
+      }
+    }
+  },
+  "closingCTA": {
+    "type": "object",
+    "description": "The final conversion block at the bottom of the page",
+    "meta_description": "A high-contrast section designed to catch 'scrollers'. It should reiterate the product's identity in 3 words (e.g., 'Open Source. Edge Native. Agent Ready.') and provide a final invitation to join the ecosystem.",
+    "properties": {
+      "title": {
+        "type": "string",
+        "meta_description": "A 3-word summary of the product's USP."
+      },
+      "description": {
+        "type": "string",
+        "meta_description": "A final 1-2 sentence pitch emphasizing the 'Future' or 'Community' aspect."
+      },
+      "primaryButton": {
+        "type": "string",
+        "meta_description": "Final conversion button text."
+      },
+      "secondaryButton": {
+        "type": "string",
+        "meta_description": "Link to documentation or whitepaper."
+      }
+    }
+  },
+  "faq": {
+    "type": "array",
+    "description": "Standard accordion for common technical hurdles",
+    "meta_description": "Addresses technical objections (Pricing, Open Source license, Integration). AI should generate 3-5 questions that a CTO or Lead Developer would ask.",
+    "items": {
+      "type": "object",
+      "properties": {
+        "question": { "type": "string" },
+        "answer": { "type": "ContentBlock[]" }
+      }
+    }
+  }
+}
