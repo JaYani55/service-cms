@@ -7,6 +7,241 @@ import Italic from '@tiptap/extension-italic';
 import { Button } from '@/components/ui/button';
 import { Bold as BoldIcon, Italic as ItalicIcon, Heading1, Heading2, Heading3, List, ListOrdered } from 'lucide-react';
 
+interface TiptapMark {
+  type: string;
+}
+
+interface TiptapNode {
+  type: string;
+  text?: string;
+  attrs?: Record<string, unknown>;
+  marks?: TiptapMark[];
+  content?: TiptapNode[];
+}
+
+const escapeMarkdownText = (text: string): string => text;
+
+const applyMarks = (text: string, marks?: TiptapMark[]): string => {
+  if (!marks || marks.length === 0) {
+    return text;
+  }
+
+  const hasBold = marks.some((mark) => mark.type === 'bold');
+  const hasItalic = marks.some((mark) => mark.type === 'italic');
+  let formatted = text;
+
+  if (hasBold && hasItalic) {
+    formatted = `***${formatted}***`;
+  } else if (hasBold) {
+    formatted = `**${formatted}**`;
+  } else if (hasItalic) {
+    formatted = `*${formatted}*`;
+  }
+
+  return formatted;
+};
+
+const serializeInlineContent = (nodes?: TiptapNode[]): string => {
+  if (!nodes || nodes.length === 0) {
+    return '';
+  }
+
+  return nodes
+    .map((node) => {
+      if (node.type === 'text') {
+        return applyMarks(escapeMarkdownText(node.text || ''), node.marks);
+      }
+
+      if (node.type === 'hardBreak') {
+        return '\n';
+      }
+
+      return serializeInlineContent(node.content);
+    })
+    .join('');
+};
+
+const serializeBlockNode = (node: TiptapNode, orderedListIndex = 0): string => {
+  if (node.type === 'heading') {
+    const level = Math.min(Math.max(Number(node.attrs?.level || 1), 1), 3);
+    return `${'#'.repeat(level)} ${serializeInlineContent(node.content)}`.trimEnd();
+  }
+
+  if (node.type === 'paragraph') {
+    return serializeInlineContent(node.content);
+  }
+
+  if (node.type === 'bulletList') {
+    return (node.content || [])
+      .map((item) => `- ${serializeListItem(item)}`.trimEnd())
+      .join('\n');
+  }
+
+  if (node.type === 'orderedList') {
+    return (node.content || [])
+      .map((item, index) => `${orderedListIndex + index + 1}. ${serializeListItem(item)}`.trimEnd())
+      .join('\n');
+  }
+
+  if (node.type === 'listItem') {
+    return serializeListItem(node);
+  }
+
+  return serializeInlineContent(node.content);
+};
+
+const serializeListItem = (node: TiptapNode): string => {
+  const blocks = node.content || [];
+  const segments = blocks
+    .map((child) => {
+      if (child.type === 'paragraph') {
+        return serializeInlineContent(child.content);
+      }
+      return serializeBlockNode(child);
+    })
+    .filter(Boolean);
+
+  return segments.join('\n');
+};
+
+const serializeDocumentToMarkdown = (doc?: TiptapNode): string => {
+  const content = doc?.content || [];
+  const blocks = content
+    .map((node) => serializeBlockNode(node))
+    .filter((block) => block.trim().length > 0);
+
+  return blocks.join('\n\n').trim();
+};
+
+const createTextNode = (text: string, marks?: TiptapMark[]): TiptapNode => ({
+  type: 'text',
+  text,
+  ...(marks && marks.length > 0 ? { marks } : {}),
+});
+
+const parseInlineMarkdown = (input: string): TiptapNode[] => {
+  const nodes: TiptapNode[] = [];
+  const pattern = /(\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  const segments = input.split('\n');
+
+  segments.forEach((segment, segmentIndex) => {
+    let cursor = 0;
+    let match: RegExpExecArray | null;
+
+    pattern.lastIndex = 0;
+    while ((match = pattern.exec(segment)) !== null) {
+      if (match.index > cursor) {
+        nodes.push(createTextNode(segment.slice(cursor, match.index)));
+      }
+
+      const token = match[0];
+      if (token.startsWith('***') && token.endsWith('***')) {
+        nodes.push(createTextNode(token.slice(3, -3), [{ type: 'bold' }, { type: 'italic' }]));
+      } else if (token.startsWith('**') && token.endsWith('**')) {
+        nodes.push(createTextNode(token.slice(2, -2), [{ type: 'bold' }]));
+      } else if (token.startsWith('*') && token.endsWith('*')) {
+        nodes.push(createTextNode(token.slice(1, -1), [{ type: 'italic' }]));
+      }
+
+      cursor = match.index + token.length;
+    }
+
+    if (cursor < segment.length) {
+      nodes.push(createTextNode(segment.slice(cursor)));
+    }
+
+    if (segmentIndex < segments.length - 1) {
+      nodes.push({ type: 'hardBreak' });
+    }
+  });
+
+  return nodes;
+};
+
+const parseParagraph = (markdown: string): TiptapNode => ({
+  type: 'paragraph',
+  content: parseInlineMarkdown(markdown),
+});
+
+const parseList = (lines: string[], ordered: boolean): TiptapNode => ({
+  type: ordered ? 'orderedList' : 'bulletList',
+  content: lines.map((line) => ({
+    type: 'listItem',
+    content: [
+      parseParagraph(line.replace(ordered ? /^\d+\.\s+/ : /^-\s+/, '')),
+    ],
+  })),
+});
+
+const parseMarkdownToDocument = (markdown: string): TiptapNode => {
+  const normalized = markdown.replace(/\r\n/g, '\n').trim();
+  if (!normalized) {
+    return {
+      type: 'doc',
+      content: [{ type: 'paragraph' }],
+    };
+  }
+
+  const lines = normalized.split('\n');
+  const content: TiptapNode[] = [];
+
+  for (let index = 0; index < lines.length;) {
+    const line = lines[index];
+
+    if (line.trim() === '') {
+      index += 1;
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,3})\s+(.*)$/);
+    if (headingMatch) {
+      content.push({
+        type: 'heading',
+        attrs: { level: headingMatch[1].length },
+        content: parseInlineMarkdown(headingMatch[2]),
+      });
+      index += 1;
+      continue;
+    }
+
+    if (/^-\s+/.test(line)) {
+      const listLines: string[] = [];
+      while (index < lines.length && /^-\s+/.test(lines[index])) {
+        listLines.push(lines[index]);
+        index += 1;
+      }
+      content.push(parseList(listLines, false));
+      continue;
+    }
+
+    if (/^\d+\.\s+/.test(line)) {
+      const listLines: string[] = [];
+      while (index < lines.length && /^\d+\.\s+/.test(lines[index])) {
+        listLines.push(lines[index]);
+        index += 1;
+      }
+      content.push(parseList(listLines, true));
+      continue;
+    }
+
+    const paragraphLines: string[] = [];
+    while (
+      index < lines.length &&
+      lines[index].trim() !== '' &&
+      !/^(#{1,3})\s+/.test(lines[index]) &&
+      !/^-\s+/.test(lines[index]) &&
+      !/^\d+\.\s+/.test(lines[index])
+    ) {
+      paragraphLines.push(lines[index]);
+      index += 1;
+    }
+
+    content.push(parseParagraph(paragraphLines.join('\n')));
+  }
+
+  return { type: 'doc', content };
+};
+
 interface MarkdownEditorProps {
   content: string;
   onChange: (content: string) => void;
@@ -34,44 +269,14 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       Bold,
       Italic,
     ],
-    content: content || '',
+    content: parseMarkdownToDocument(content || ''),
     onUpdate: ({ editor }) => {
       // Prevent update loops - don't trigger onChange if we're updating from props
       if (isUpdatingFromPropRef.current) {
         return;
       }
 
-      const html = editor.getHTML();
-      
-      // Convert HTML to markdown format with better handling
-  const markdown = html
-        // Handle nested formatting (strong inside p, em inside p, etc.)
-        .replace(/<p><strong>(.*?)<\/strong><\/p>/g, '**$1**\n\n')
-        .replace(/<p><em>(.*?)<\/em><\/p>/g, '*$1*\n\n')
-        // Handle inline formatting
-        .replace(/<strong>(.*?)<\/strong>/g, '**$1**')
-        .replace(/<em>(.*?)<\/em>/g, '*$1*')
-        // Handle headings
-        .replace(/<h1>(.*?)<\/h1>/g, '# $1\n\n')
-        .replace(/<h2>(.*?)<\/h2>/g, '## $1\n\n')
-        .replace(/<h3>(.*?)<\/h3>/g, '### $1\n\n')
-        // Handle lists
-        .replace(/<ul>(.*?)<\/ul>/gs, (match, content) => {
-          const items = content.replace(/<li><p>(.*?)<\/p><\/li>/g, '- $1\n').replace(/<li>(.*?)<\/li>/g, '- $1\n');
-          return items + '\n';
-        })
-        .replace(/<ol>(.*?)<\/ol>/gs, (match, content) => {
-          let index = 1;
-          const items = content.replace(/<li><p>(.*?)<\/p><\/li>/g, (_, text) => `${index++}. ${text}\n`).replace(/<li>(.*?)<\/li>/g, (_, text) => `${index++}. ${text}\n`);
-          return items + '\n';
-        })
-        // Handle paragraphs (after other replacements to avoid conflicts)
-        .replace(/<p>(.*?)<\/p>/g, '$1\n\n')
-        // Handle line breaks
-        .replace(/<br\s*\/?>/g, '\n')
-        // Clean up multiple newlines
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
+      const markdown = serializeDocumentToMarkdown(editor.getJSON() as TiptapNode);
 
       // Update the last content reference
       lastContentRef.current = markdown;
@@ -90,43 +295,13 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         return;
       }
 
-      const currentContent = editor.getHTML();
-      
-      // Convert markdown to HTML for display with improved parsing
-      let html = content;
-      
-      // First, handle headings (must be done before paragraph processing)
-      html = html
-        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-        .replace(/^# (.+)$/gm, '<h1>$1</h1>');
-      
-      // Handle lists
-      html = html
-        .replace(/^- (.+)$/gm, '<li>$1</li>')
-        .replace(/(<li>.*?<\/li>\n?)+/gs, '<ul>$&</ul>')
-        .replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
-      
-      // Handle inline formatting (bold and italic)
-      html = html
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.+?)\*/g, '<em>$1</em>');
-      
-      // Split by double newlines to create paragraphs, but skip already formatted content
-      const lines = html.split('\n\n');
-      html = lines.map(line => {
-        line = line.trim();
-        // Don't wrap if already a block element
-        if (!line || line.startsWith('<h') || line.startsWith('<ul') || line.startsWith('<ol')) {
-          return line;
-        }
-        return `<p>${line}</p>`;
-      }).filter(line => line).join('');
+      const nextDoc = parseMarkdownToDocument(content);
+      const currentMarkdown = serializeDocumentToMarkdown(editor.getJSON() as TiptapNode);
 
-      if (currentContent !== html) {
+      if (currentMarkdown !== content) {
         // Set flag to prevent onUpdate from firing
         isUpdatingFromPropRef.current = true;
-        editor.commands.setContent(html, { emitUpdate: false });
+        editor.commands.setContent(nextDoc, { emitUpdate: false });
         // Reset the flag immediately since emitUpdate is false
         isUpdatingFromPropRef.current = false;
         // Update last content reference
