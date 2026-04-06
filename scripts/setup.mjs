@@ -826,6 +826,9 @@ async function stepMigrations(supabaseUrl, serviceRoleKey, storageProvider, stor
   //  staff_registry.sql        — needs roles + user_roles + user_profile + mentor_groups
   //  products.sql              — needs set_current_timestamp_updated_at (preamble)
   //  page_schemas.sql          — needs set_current_timestamp_updated_at (preamble)
+  //  forms.sql                 — needs set_current_timestamp_updated_at (preamble)
+  //  forms_answers.sql         — needs forms
+  //  forms_published_default.sql — converts legacy drafts and updates forms status default/check
   //  plugins.sql               — needs set_current_timestamp_updated_at (preamble)
   //  plugins_config_schema.sql — additive update for existing installations
   //  mentorbooking_products.sql — needs products (FK)
@@ -849,6 +852,9 @@ async function stepMigrations(supabaseUrl, serviceRoleKey, storageProvider, stor
     'staff_registry.sql',
     'products.sql',
     'page_schemas.sql',
+    'forms.sql',
+    'forms_answers.sql',
+    'forms_published_default.sql',
     'plugins.sql',
     'plugins_config_schema.sql',
     'mentorbooking_products.sql',

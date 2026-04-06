@@ -1,4 +1,4 @@
-import { Calendar, Settings, Users, User, List, LogOut, HelpCircle, Moon, Sun, ChevronUp, FileText, SlidersHorizontal, Puzzle, Globe } from "lucide-react"
+import { Calendar, Settings, Users, User, List, LogOut, HelpCircle, Moon, Sun, ChevronUp, FileText, SlidersHorizontal, Puzzle, Globe, ClipboardList } from "lucide-react"
 import { useLocation, Link } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { useTheme } from "@/contexts/ThemeContext"
@@ -58,6 +58,11 @@ export function AppSidebar() {
         title: language === "en" ? "Pages" : "Seiten",
         url: "/pages",
         icon: FileText,
+      },
+      {
+        title: language === "en" ? "Forms" : "Formulare",
+        url: "/forms",
+        icon: ClipboardList,
       },
       {
         title: language === "en" ? "Administration" : "Verwaltung",

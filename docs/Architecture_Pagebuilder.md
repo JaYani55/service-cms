@@ -10,6 +10,7 @@ This architecture enables:
 - **LLM-assisted frontend generation**: Schemas include machine-readable specs, per-field help text, placeholders, and meta-descriptions
 - **ISR-ready communication**: On-demand revalidation webhooks notify frontends of content changes
 - **Reversible registration**: Domains can be disconnected at any time via the Unhook flow
+- **Reusable form references inside content**: Pages can embed published forms through a dedicated `form` content block
 
 ---
 
@@ -24,6 +25,7 @@ This architecture enables:
 │  /pages/schema/:slug            Page list for schema            │
 │  /pages/schema/:slug/edit/:id   PageBuilder (edit page)         │
 │  /pages/schema/:slug/new        PageBuilder (new page)          │
+│  /forms                         Forms list/editor/answers       │
 └────────────────┬────────────────────────────────────────────────┘
                  │ Direct Supabase client calls
                  ▼
@@ -32,6 +34,8 @@ This architecture enables:
 │                                                                 │
 │  page_schemas    Schema definitions, registration, LLM config   │
 │  pages           Page content (JSONB), linked to schema         │
+│  forms           Form definitions (JSONB) + share/API config    │
+│  forms_answers   Submitted answers + source tracking            │
 │  mentorbooking_products   Legacy FK to pages via product_page_id│
 └────────────────┬────────────────────────────────────────────────┘
                  │ Service role key (server-side only)
@@ -44,6 +48,9 @@ This architecture enables:
 │  POST /api/schemas/:slug/register     Frontend registration      │
 │  GET  /api/schemas/:slug/health       Domain ONLINE/OFFLINE      │
 │  POST /api/schemas/:slug/revalidate   Trigger ISR on frontend   │
+│  GET  /api/forms                      Published forms index      │
+│  GET  /api/forms/:id-or-slug          Machine-readable form def  │
+│  POST /api/forms/:id-or-slug/answers  Store form submission      │
 │  /mcp                                 MCP agent endpoint        │
 └────────────────┬────────────────────────────────────────────────┘
                  │ HTTP (public)
@@ -96,6 +103,36 @@ This architecture enables:
 | `updated_at` | `timestamptz` | Auto-updated via trigger |
 | `published_at` | `timestamptz` | Nullable |
 
+### `forms`
+
+| Column | Type | Details |
+|--------|------|---------|
+| `id` | `uuid` PK | `DEFAULT gen_random_uuid()` |
+| `name` | `varchar(255)` | NOT NULL |
+| `slug` | `varchar(255)` | UNIQUE NOT NULL |
+| `description` | `text` | Optional description |
+| `schema` | `jsonb` | NOT NULL — form field definition |
+| `llm_instructions` | `text` | Optional custom instructions for agents |
+| `status` | `varchar(50)` | `'draft'` \| `'published'` \| `'archived'` |
+| `share_enabled` | `boolean` | Enables direct share rendering |
+| `share_slug` | `varchar(255)` | Unique root-level share path |
+| `requires_auth` | `boolean` | Shared auth toggle for share + REST access |
+| `api_enabled` | `boolean` | Enables machine-facing REST access |
+| `created_at` | `timestamptz` | `DEFAULT now()` |
+| `updated_at` | `timestamptz` | `DEFAULT now()` (auto-updated via trigger) |
+
+### `forms_answers`
+
+| Column | Type | Details |
+|--------|------|---------|
+| `id` | `uuid` PK | `DEFAULT gen_random_uuid()` |
+| `form_id` | `uuid` FK | References `forms(id)` |
+| `submitted_by` | `uuid` | Optional `auth.users.id` |
+| `answers` | `jsonb` | Submitted answer payload |
+| `source_slug` | `text` | Where the form was filled |
+| `submitted_via` | `varchar(50)` | `'share'` \| `'api'` \| `'page'` |
+| `created_at` | `timestamptz` | `DEFAULT now()` |
+
 ### Relationship Diagram
 
 ```
@@ -142,6 +179,39 @@ interface SchemaFieldDefinition {
 
 **`meta_description`** is designed for LLM agents and developers to understand field intent, design decisions, and constraints. It is serialised into the schema JSONB and exposed via `GET /api/schemas/:slug/spec.txt` and the schema API — but is never rendered in the PageBuilder UI.
 
+### Form Schema Format
+
+Forms use a flat field-definition JSON structure rather than the recursive page schema format.
+
+```json
+{
+  "email": {
+    "type": "email",
+    "label": "Email",
+    "required": true,
+    "placeholder": "ada@example.com",
+    "meta_description": "Primary contact address for follow-up."
+  },
+  "topic": {
+    "type": "select",
+    "label": "Topic",
+    "required": true,
+    "options": ["Sales", "Support", "Partnership"]
+  }
+}
+```
+
+Supported form field types in the current implementation:
+
+- `text`
+- `textarea`
+- `email`
+- `number`
+- `checkbox`
+- `select`
+- `radio`
+- `date`
+
 ---
 
 ## Hono API Endpoints
@@ -176,6 +246,22 @@ Triggers ISR revalidation on the registered frontend. The CMS calls this automat
 
 ### `/mcp`
 MCP-compatible endpoint exposing 4 tools: `list_schemas`, `get_schema_spec`, `register_frontend`, `check_health`.
+
+### `GET /api/forms`
+Returns the published forms index for CMS and agent use.
+
+### `GET /api/forms/:identifier`
+Returns a normalized machine-readable form definition including fields and `llm_instructions`.
+
+### `POST /api/forms/:identifier/answers`
+Validates submitted answers against the stored form definition and writes a row into `forms_answers`.
+
+### Share Endpoints
+
+- `GET /api/forms/share/:shareSlug`
+- `POST /api/forms/share/:shareSlug/answers`
+
+These endpoints resolve forms by `share_slug` for the direct ServiceCMS share-page flow.
 
 ---
 
@@ -229,6 +315,26 @@ The CMS sends revalidation calls with the bare slug (e.g. `my-post`), not the fu
 ---
 
 ## PageBuilder Component Architecture
+
+### Forms as Content Blocks
+
+The `ContentBlock` union now includes a `form` block type. This block stores a form reference, not an embedded snapshot.
+
+Stored shape:
+
+```json
+{
+  "id": "content-1712420000000-abcd12345",
+  "type": "form",
+  "form_id": "<uuid>",
+  "form_slug": "lead-capture",
+  "form_name": "Lead Capture",
+  "share_slug": "lead-capture",
+  "requires_auth": false
+}
+```
+
+This allows one published form to be reused across multiple pages and submission contexts.
 
 ### Mode Detection
 

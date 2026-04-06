@@ -67,6 +67,7 @@ const createDefaultBlock = (type: ContentBlock['type'], prefix: string): Content
     case 'quote':   return { id, type: 'quote', text: '' };
     case 'list':    return { id, type: 'list', style: 'unordered', items: [] };
     case 'video':   return { id, type: 'video', src: '', provider: 'youtube' };
+    case 'form':    return { id, type: 'form', form_id: '', form_slug: '', form_name: '' };
   }
 };
 
@@ -201,7 +202,7 @@ const ContentBlocksEditor: React.FC<ContentBlocksEditorProps> = ({ fieldName, bl
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56">
-          {(['text', 'heading', 'image', 'quote', 'list', 'video'] as ContentBlock['type'][]).map((t) => (
+          {(['text', 'heading', 'image', 'quote', 'list', 'video', 'form'] as ContentBlock['type'][]).map((t) => (
             <DropdownMenuItem key={t} onClick={() => addBlock(t)}>
               {t === 'text'    && '📝 '}
               {t === 'heading' && '📋 '}
@@ -209,6 +210,7 @@ const ContentBlocksEditor: React.FC<ContentBlocksEditorProps> = ({ fieldName, bl
               {t === 'quote'   && '💬 '}
               {t === 'list'    && '📄 '}
               {t === 'video'   && '🎥 '}
+              {t === 'form'    && '🧾 '}
               {t.charAt(0).toUpperCase() + t.slice(1)} Block
             </DropdownMenuItem>
           ))}

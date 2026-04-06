@@ -1,5 +1,5 @@
 // Content Block Types
-export type ContentBlock = TextBlock | HeadingBlock | ImageBlock | QuoteBlock | ListBlock | VideoBlock;
+export type ContentBlock = TextBlock | HeadingBlock | ImageBlock | QuoteBlock | ListBlock | VideoBlock | FormBlock;
 
 export interface CodeBlockItem {
   id: string;
@@ -53,6 +53,15 @@ export interface VideoBlock extends BaseBlock {
   src: string;
   provider: 'youtube' | 'vimeo' | 'other';
   caption?: string;
+}
+
+export interface FormBlock extends BaseBlock {
+  type: 'form';
+  form_id: string;
+  form_slug: string;
+  form_name: string;
+  share_slug?: string;
+  requires_auth?: boolean;
 }
 
 // Page Builder Data Interfaces

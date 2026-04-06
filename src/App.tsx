@@ -27,6 +27,10 @@ import PageBuilder from "./pages/PageBuilder";
 import Pages from "./pages/Pages";
 import PagesSchemaDetail from "./pages/PagesSchemaDetail";
 import SchemaEditor from "./pages/SchemaEditor";
+import Forms from "./pages/Forms";
+import FormEditor from "./pages/FormEditor";
+import FormAnswers from "./pages/FormAnswers";
+import FormSharePage from "./pages/FormSharePage";
 
 // Import components
 import Layout from "./components/layout/Layout";
@@ -44,6 +48,7 @@ import VerwaltungMentorGroups from "./pages/VerwaltungMentorGroups";
 import VerwaltungMentorGiveTraits from "./pages/VerwaltungMentorGiveTraits";
 import VerwaltungAccounts from "./pages/VerwaltungAccounts";
 import VerwaltungConnections from "./pages/VerwaltungConnections";
+import VerwaltungApi from "./pages/VerwaltungApi";
 import Plugins from "./pages/Plugins";
 
 // Plugin loader — provides build-time routes from installed plugins
@@ -216,10 +221,16 @@ const AppContent = () => {
           <Route path="/pages/schema/:schemaSlug/new" element={<ProtectedRoute requiredRole="user"><PageBuilder /></ProtectedRoute>} />
           <Route path="/pages/schema/:schemaSlug/edit/:pageId" element={<ProtectedRoute requiredRole="user"><PageBuilder /></ProtectedRoute>} />
 
+          <Route path="/forms" element={<ProtectedRoute requiredRole="user"><Forms /></ProtectedRoute>} />
+          <Route path="/forms/new" element={<ProtectedRoute requiredRole="user"><FormEditor /></ProtectedRoute>} />
+          <Route path="/forms/:formId" element={<ProtectedRoute requiredRole="user"><FormEditor /></ProtectedRoute>} />
+          <Route path="/forms/:formId/answers" element={<ProtectedRoute requiredRole="user"><FormAnswers /></ProtectedRoute>} />
+
           {/* Admin Routes */}
           <Route path="/admin" element={<ProtectedRoute requiredRole="user"><Verwaltung /></ProtectedRoute>} />
           <Route path="/admin/accounts" element={<ProtectedRoute requiredRole="admin"><VerwaltungAccounts /></ProtectedRoute>} />
           <Route path="/admin/connections" element={<ProtectedRoute requiredRole="super-admin"><VerwaltungConnections /></ProtectedRoute>} />
+          <Route path="/admin/api" element={<ProtectedRoute requiredRole="super-admin"><VerwaltungApi /></ProtectedRoute>} />
           <Route path="/admin/add-mentor" element={<ProtectedRoute requiredRole="user"><VerwaltungAddMentor /></ProtectedRoute>} />
           <Route path="/admin/all-mentors" element={<ProtectedRoute requiredRole="user"><VerwaltungAllMentors /></ProtectedRoute>} />
           <Route path="/admin/all-products" element={<ProtectedRoute requiredRole="user"><VerwaltungAllProducts /></ProtectedRoute>} />
@@ -266,6 +277,7 @@ const AppContent = () => {
 
           <Route path="/test-loader" element={<ProtectedRoute><TestLoader /></ProtectedRoute>} />
         </Route>
+        <Route path="/:formShareSlug" element={<FormSharePage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       

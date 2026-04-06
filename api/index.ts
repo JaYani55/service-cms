@@ -9,6 +9,7 @@ import mcpRoute from './routes/mcp';
 import secretsRoute from './routes/secrets';
 import mediaRoute from './routes/media';
 import pluginsRoute from './routes/plugins';
+import formsRoute from './routes/forms';
 import { mountPluginRoutes } from './plugin-routes';
 import { agentLogger } from './middleware/agentLogger';
 
@@ -49,6 +50,7 @@ app.route('/api/schemas', health);
 app.route('/api/secrets', secretsRoute);
 app.route('/api/media', mediaRoute);
 app.route('/api/plugins', pluginsRoute);
+app.route('/api/forms', formsRoute);
 app.route('/mcp', mcpRoute);
 
 // Plugin API routes (auto-wired from api/plugin-routes.ts)

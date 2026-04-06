@@ -62,6 +62,15 @@ const ContentBlockSchema = z.union([
     provider: z.enum(['youtube', 'vimeo', 'other']),
     caption: z.string().optional(),
   }),
+  z.object({
+    id: z.string(),
+    type: z.literal('form'),
+    form_id: z.string(),
+    form_slug: z.string(),
+    form_name: z.string(),
+    share_slug: z.string().optional(),
+    requires_auth: z.boolean().optional(),
+  }),
 ]);
 
 const PageBuilderSchema = z.object({

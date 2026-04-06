@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import type { UseFormReturn, FieldValues } from 'react-hook-form';
 import { ContentBlock } from '@/types/pagebuilder';
+import type { FormRecord } from '@/types/forms';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -8,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ImageUploader } from './ImageUploader';
 import { MarkdownEditor } from './MarkdownEditor';
+import { getPublishedForms } from '@/services/formService';
 import { Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 
@@ -24,6 +26,16 @@ export const ContentBlockEditor: React.FC<ContentBlockEditorProps> = ({
   onRemove,
   form,
 }) => {
+  const [availableForms, setAvailableForms] = useState<FormRecord[]>([]);
+
+  useEffect(() => {
+    if (block.type !== 'form') return;
+
+    getPublishedForms()
+      .then(setAvailableForms)
+      .catch(() => setAvailableForms([]));
+  }, [block.type]);
+
   return (
     <Card className="p-4 space-y-4 bg-muted/30">
       <div className="flex justify-between items-center">
@@ -35,6 +47,7 @@ export const ContentBlockEditor: React.FC<ContentBlockEditorProps> = ({
             {block.type === 'quote' && '💬'}
             {block.type === 'list' && '📋'}
             {block.type === 'video' && '🎥'}
+            {block.type === 'form' && '🧾'}
           </span>
           <span>
             {block.type === 'text' && 'Text Block'}
@@ -43,6 +56,7 @@ export const ContentBlockEditor: React.FC<ContentBlockEditorProps> = ({
             {block.type === 'quote' && 'Quote Block'}
             {block.type === 'list' && 'List Block'}
             {block.type === 'video' && 'Video Block'}
+            {block.type === 'form' && 'Forms Block'}
           </span>
         </Label>
         <Button type="button" variant="destructive" size="sm" onClick={onRemove}>
@@ -238,6 +252,44 @@ export const ContentBlockEditor: React.FC<ContentBlockEditorProps> = ({
           <div>
             <Label className="text-sm">Caption (Optional)</Label>
             <Input {...form.register(`${path}.caption`)} />
+          </div>
+        </>
+      )}
+
+      {block.type === 'form' && (
+        <>
+          <div>
+            <Label className="text-sm">Formular</Label>
+            <Select
+              value={form.watch(`${path}.form_id`) || undefined}
+              onValueChange={(value) => {
+                const selectedForm = availableForms.find((entry) => entry.id === value);
+                form.setValue(`${path}.form_id`, value);
+                form.setValue(`${path}.form_slug`, selectedForm?.slug || '');
+                form.setValue(`${path}.form_name`, selectedForm?.name || '');
+                form.setValue(`${path}.share_slug`, selectedForm?.share_slug || '');
+                form.setValue(`${path}.requires_auth`, selectedForm?.requires_auth || false);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Veröffentlichtes Formular wählen..." />
+              </SelectTrigger>
+              <SelectContent>
+                {availableForms.map((availableForm) => (
+                  <SelectItem key={availableForm.id} value={availableForm.id}>{availableForm.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+            <div className="rounded-md border bg-muted/20 px-3 py-2">
+              <div className="font-medium text-foreground">Slug</div>
+              <div>{form.watch(`${path}.form_slug`) || '-'}</div>
+            </div>
+            <div className="rounded-md border bg-muted/20 px-3 py-2">
+              <div className="font-medium text-foreground">Share</div>
+              <div>{form.watch(`${path}.share_slug`) ? `/${form.watch(`${path}.share_slug`)}` : '—'}</div>
+            </div>
           </div>
         </>
       )}

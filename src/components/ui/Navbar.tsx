@@ -3,7 +3,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useTheme } from "../../contexts/ThemeContext";
 import { usePermissions } from '@/hooks/usePermissions';
 import { useEnabledWebapps } from '@/hooks/useEnabledWebapps';
-import { Moon, Sun, Menu, Calendar, Users, List, X, Settings, LogOut, HelpCircle, SlidersHorizontal, FileText, Globe } from "lucide-react";
+import { Moon, Sun, Menu, Calendar, Users, List, X, Settings, LogOut, HelpCircle, SlidersHorizontal, FileText, Globe, ClipboardList } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import Logo from "../shared/Logo";
@@ -29,6 +29,11 @@ const Navbar = () => {
         icon: FileText,
         label: language === "en" ? "Pages" : "Seiten",
         href: "/pages"
+      },
+      {
+        icon: ClipboardList,
+        label: language === "en" ? "Forms" : "Formulare",
+        href: "/forms"
       },
       {
         icon: Settings,

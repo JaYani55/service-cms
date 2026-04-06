@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ContentBlock } from '@/types/pagebuilder';
+import type { FormRecord } from '@/types/forms';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -14,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { ImageUploader } from './ImageUploader';
 import { MarkdownEditor } from './MarkdownEditor';
+import { getPublishedForms } from '@/services/formService';
 import { Trash2, Plus, X } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { useSortable } from '@dnd-kit/sortable';
@@ -27,6 +29,7 @@ const BLOCK_LABELS: Record<string, string> = {
   quote: 'Quote Block',
   list: 'List Block',
   video: 'Video Block',
+  form: 'Forms Block',
 };
 
 const BLOCK_ICONS: Record<string, string> = {
@@ -36,6 +39,7 @@ const BLOCK_ICONS: Record<string, string> = {
   quote: '💬',
   list: '📄',
   video: '🎥',
+  form: '🧾',
 };
 
 interface StandaloneContentBlockEditorProps {
@@ -64,6 +68,15 @@ export const StandaloneContentBlockEditor: React.FC<StandaloneContentBlockEditor
     zIndex: isDragging ? 1 : 0,
     opacity: isDragging ? 0.5 : 1,
   };
+  const [availableForms, setAvailableForms] = useState<FormRecord[]>([]);
+
+  useEffect(() => {
+    if (block.type !== 'form') return;
+
+    getPublishedForms()
+      .then(setAvailableForms)
+      .catch(() => setAvailableForms([]));
+  }, [block.type]);
 
   // Typed patch helper — merges partial update onto current block
   const patch = (update: Record<string, unknown>) =>
@@ -334,6 +347,47 @@ export const StandaloneContentBlockEditor: React.FC<StandaloneContentBlockEditor
                 onChange={(e) => patch({ caption: e.target.value })}
                 placeholder="Bildunterschrift (optional)"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {block.type === 'form' && (
+        <div className="space-y-3">
+          <div>
+            <Label className="text-sm">Formular</Label>
+            <Select
+              value={block.form_id || undefined}
+              onValueChange={(formId) => {
+                const selectedForm = availableForms.find((entry) => entry.id === formId);
+                patch({
+                  form_id: formId,
+                  form_slug: selectedForm?.slug || '',
+                  form_name: selectedForm?.name || '',
+                  share_slug: selectedForm?.share_slug,
+                  requires_auth: selectedForm?.requires_auth || false,
+                });
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Veröffentlichtes Formular wählen..." />
+              </SelectTrigger>
+              <SelectContent>
+                {availableForms.map((availableForm) => (
+                  <SelectItem key={availableForm.id} value={availableForm.id}>{availableForm.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+            <div className="rounded-md border bg-muted/20 px-3 py-2">
+              <div className="font-medium text-foreground">Slug</div>
+              <div>{block.form_slug || '-'}</div>
+            </div>
+            <div className="rounded-md border bg-muted/20 px-3 py-2">
+              <div className="font-medium text-foreground">Share</div>
+              <div>{block.share_slug ? `/${block.share_slug}` : '—'}</div>
             </div>
           </div>
         </div>

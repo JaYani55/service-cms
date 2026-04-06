@@ -47,6 +47,7 @@ The application has been migrated to a **Supabase-only architecture**. Historica
 ### Core Backend (Supabase)
 -   **Authentication (Supabase Auth):** Handles user sessions, registration, and role-based access control (RBAC). 
 -   **Product & Page Management:** Manages core product data (`mentorbooking_products`) and dynamic page content stored as JSONB in the `products` table.
+-   **Forms Management:** Stores reusable form definitions in `forms` and submissions in `forms_answers`, including share-link, auth, and agent/API access settings.
 -   **Mentor & Staff Management:** 
     -   Supabase now acts as the primary source of truth for all users.
     -   Profile metadata (names, bios, initials) is retrieved from the `user_profile` table.
@@ -95,6 +96,8 @@ All database tables are defined as plain SQL files under `migrations/`. They are
 | `mentor_groups.sql` | Mentor group definitions. No external FK dependencies. |
 | `products.sql` | Product/page records stored as JSONB (`public.products`). Uses `set_current_timestamp_updated_at` and `sync_is_draft_with_status` trigger functions. **Note:** this table is renamed to `pages` by `pages.sql`. |
 | `page_schemas.sql` | Schema registry for the dynamic page-builder (`public.page_schemas`). Seeded with the default `service-product` schema. Uses `set_current_timestamp_updated_at`. |
+| `forms.sql` | Form definitions table (`public.forms`) with JSONB schema, LLM instructions, share-link settings, API access flags, and RLS policies. |
+| `forms_answers.sql` | Form submission storage (`public.forms_answers`) keyed to `forms`, including `source_slug`, submission channel, and RLS policies. |
 | `mentorbooking_products.sql` | Booking products / pillars (`public.mentorbooking_products`). FK to `products`. |
 | `pages.sql` | Renames `products` → `pages`, adds `schema_id` FK to `page_schemas`, and renames the FK constraint on `mentorbooking_products`. **Must run after `mentorbooking_products.sql`** so the constraint to rename already exists. |
 | `mentorbooking_events.sql` | Event scheduling table. FKs to `employers` and `mentorbooking_products`. Uses `update_event_status` and `update_event_status_on_request` trigger functions. |
@@ -118,6 +121,8 @@ preamble.sql                    (app_enum, trigger functions)
             └─ pages.sql        (renames products + FK on mentorbooking_products)
             └─ mentorbooking_events.sql
             └─ mentorbooking_events_archive.sql
+  └─ forms.sql
+      └─ forms_answers.sql
   └─ page_schemas.sql
        └─ pages.sql
        └─ agent_logs.sql
@@ -133,6 +138,7 @@ preamble.sql                    (app_enum, trigger functions)
 | :--- | :--- | :--- |
 | `public.app_enum` | `ENUM` | `roles.sql` (`app app_enum[]` column) |
 | `set_current_timestamp_updated_at()` | trigger fn | `products.sql`, `page_schemas.sql` |
+| `set_current_timestamp_updated_at()` | trigger fn | `forms.sql` |
 | `sync_is_draft_with_status()` | trigger fn | `products.sql` (keeps `is_draft` ↔ `status` in sync) |
 | `update_event_status()` | trigger fn | `mentorbooking_events.sql` (INSERT / UPDATE trigger) |
 | `update_event_status_on_request()` | trigger fn | `mentorbooking_events.sql` (UPDATE trigger) |

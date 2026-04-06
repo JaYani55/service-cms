@@ -13,7 +13,8 @@ import {
   BarChart3, 
   Plus,
   ShieldCheck,
-  Unplug
+  Unplug,
+  Waypoints
 } from 'lucide-react';
 import { AdminCard } from '@/components/admin/ui/AdminCard'; // Add this import
 
@@ -139,6 +140,17 @@ const Verwaltung = () => {
       permission: 'canManageAccounts',
       isSuperAdmin: true,
       color: 'from-slate-600 to-slate-800',
+    },
+    {
+      title: language === 'de' ? 'API Administration' : 'API Administration',
+      description: language === 'de'
+        ? 'Swagger-artige Betriebsansicht der Worker-Endpunkte mit Auth-, Logging- und Payload-Details'
+        : 'Swagger-style operational view of worker endpoints with auth, logging, and payload details',
+      icon: Waypoints,
+      href: '/admin/api',
+      permission: 'canManageAccounts',
+      isSuperAdmin: true,
+      color: 'from-cyan-600 to-slate-800',
     },
   ];
 

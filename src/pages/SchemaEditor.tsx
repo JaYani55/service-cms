@@ -25,7 +25,21 @@ import { SCHEMA_TEMPLATES, type SchemaTemplate } from '@/config/schemaTemplates'
 const FIELD_TYPES = ['string', 'number', 'boolean', 'array', 'object', 'ContentBlock[]', 'CodeBlock[]', 'media'] as const;
 const VALID_SCHEMA_TYPES = new Set<string>(FIELD_TYPES);
 
-const emptyField = (): SchemaFieldDefinition => ({
+interface EditorSchemaFieldDefinition extends Omit<SchemaFieldDefinition, 'properties' | 'items'> {
+  editorId: string;
+  properties?: EditorSchemaFieldDefinition[];
+  items?: EditorSchemaFieldDefinition;
+}
+
+const createEditorFieldId = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `schema-field-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+};
+
+const emptyField = (): EditorSchemaFieldDefinition => ({
+  editorId: createEditorFieldId(),
   name: '',
   type: 'string',
   description: '',
@@ -34,12 +48,14 @@ const emptyField = (): SchemaFieldDefinition => ({
   required: false,
 });
 
-const defaultCodeBlockItemsField = (): SchemaFieldDefinition => ({
+const defaultCodeBlockItemsField = (): EditorSchemaFieldDefinition => ({
+  editorId: createEditorFieldId(),
   name: 'item',
   type: 'object',
   required: false,
   properties: [
     {
+      editorId: createEditorFieldId(),
       name: 'label',
       type: 'string',
       description: 'Optional display label for this code variant.',
@@ -48,6 +64,7 @@ const defaultCodeBlockItemsField = (): SchemaFieldDefinition => ({
       required: false,
     },
     {
+      editorId: createEditorFieldId(),
       name: 'language',
       type: 'string',
       description: 'Programming language used for syntax highlighting.',
@@ -56,6 +73,7 @@ const defaultCodeBlockItemsField = (): SchemaFieldDefinition => ({
       required: true,
     },
     {
+      editorId: createEditorFieldId(),
       name: 'pattern',
       type: 'string',
       description: 'Optional implementation pattern or style.',
@@ -64,12 +82,14 @@ const defaultCodeBlockItemsField = (): SchemaFieldDefinition => ({
       required: false,
     },
     {
+      editorId: createEditorFieldId(),
       name: 'frameworks',
       type: 'array',
       description: 'Optional framework tags for filtering or variant selection.',
       meta_description: 'Optional list of frameworks or runtimes this snippet applies to. When enum options are provided, the Page Builder renders this as a multi-select control.',
       required: false,
       items: {
+        editorId: createEditorFieldId(),
         name: 'item',
         type: 'string',
         description: 'Framework or runtime name.',
@@ -79,6 +99,7 @@ const defaultCodeBlockItemsField = (): SchemaFieldDefinition => ({
       },
     },
     {
+      editorId: createEditorFieldId(),
       name: 'code',
       type: 'string',
       description: 'Source code for this variant.',
@@ -93,7 +114,7 @@ interface SchemaJsonParseResult {
   valid: boolean;
   errors: string[];
   warnings: string[];
-  fields: SchemaFieldDefinition[];
+  fields: EditorSchemaFieldDefinition[];
   normalizedSchema: Record<string, unknown> | null;
 }
 
@@ -133,7 +154,7 @@ const parseSchemaFieldEntry = (
   fieldName: string,
   value: unknown,
   path: string,
-): { field: SchemaFieldDefinition | null; errors: string[]; warnings: string[] } => {
+): { field: EditorSchemaFieldDefinition | null; errors: string[]; warnings: string[] } => {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -166,7 +187,8 @@ const parseSchemaFieldEntry = (
     return { field: null, errors, warnings };
   }
 
-  const field: SchemaFieldDefinition = {
+  const field: EditorSchemaFieldDefinition = {
+    editorId: createEditorFieldId(),
     name: fieldName,
     type: normalizedType as SchemaFieldDefinition['type'],
     description: validateOptionalString(value.description, path, 'description', errors),
@@ -191,7 +213,7 @@ const parseSchemaFieldEntry = (
     } else if (!isPlainObject(value.properties)) {
       errors.push(`${path}.properties must be an object whose keys are nested field names.`);
     } else {
-      const nestedFields: SchemaFieldDefinition[] = [];
+      const nestedFields: EditorSchemaFieldDefinition[] = [];
       for (const [nestedName, nestedValue] of Object.entries(value.properties)) {
         const nestedResult = parseSchemaFieldEntry(nestedName, nestedValue, `${path}.properties.${nestedName}`);
         errors.push(...nestedResult.errors);
@@ -279,7 +301,7 @@ const parseSchemaJsonDefinition = (raw: string): SchemaJsonParseResult => {
     };
   }
 
-  const fields: SchemaFieldDefinition[] = [];
+  const fields: EditorSchemaFieldDefinition[] = [];
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -303,7 +325,7 @@ const parseSchemaJsonDefinition = (raw: string): SchemaJsonParseResult => {
   };
 };
 
-const fieldsToJsonSchema = (fields: SchemaFieldDefinition[]): Record<string, unknown> => {
+const fieldsToJsonSchema = (fields: EditorSchemaFieldDefinition[]): Record<string, unknown> => {
   const result: Record<string, unknown> = {};
   for (const field of fields) {
     if (!field.name.trim()) continue;
@@ -345,11 +367,12 @@ const fieldsToJsonSchema = (fields: SchemaFieldDefinition[]): Record<string, unk
   return result;
 };
 
-const jsonSchemaToFields = (schema: Record<string, unknown>): SchemaFieldDefinition[] => {
-  const fields: SchemaFieldDefinition[] = [];
+const jsonSchemaToFields = (schema: Record<string, unknown>): EditorSchemaFieldDefinition[] => {
+  const fields: EditorSchemaFieldDefinition[] = [];
   for (const [name, value] of Object.entries(schema)) {
     const entry = value as Record<string, unknown>;
-    const field: SchemaFieldDefinition = {
+    const field: EditorSchemaFieldDefinition = {
+      editorId: createEditorFieldId(),
       name,
       type: (entry.type as SchemaFieldDefinition['type']) || 'string',
       description: (entry.description as string) || '',
@@ -369,9 +392,14 @@ const jsonSchemaToFields = (schema: Record<string, unknown>): SchemaFieldDefinit
     if (entry.items && typeof entry.items === 'object') {
       const items = entry.items as Record<string, unknown>;
       field.items = {
+        editorId: createEditorFieldId(),
         name: 'item',
         type: (items.type as SchemaFieldDefinition['type']) || 'string',
         description: (items.description as string) || '',
+        placeholder: (items.placeholder as string) || '',
+        meta_description: (items.meta_description as string) || '',
+        required: (items.required as boolean) || false,
+        ...(items.enum ? { enum: items.enum as string[] } : {}),
         ...(items.properties
           ? { properties: jsonSchemaToFields(items.properties as Record<string, unknown>) }
           : {}),
@@ -384,8 +412,8 @@ const jsonSchemaToFields = (schema: Record<string, unknown>): SchemaFieldDefinit
 };
 
 interface FieldEditorProps {
-  field: SchemaFieldDefinition;
-  onChange: (field: SchemaFieldDefinition) => void;
+  field: EditorSchemaFieldDefinition;
+  onChange: (field: EditorSchemaFieldDefinition) => void;
   onRemove: () => void;
   depth?: number;
 }
@@ -470,11 +498,11 @@ const FieldEditor: React.FC<FieldEditorProps> = ({ field, onChange, onRemove, de
         <div className="flex items-center gap-1 pt-5">
           <div className="flex items-center gap-1">
             <Checkbox
-              id={`req-${field.name}-${depth}`}
+              id={`req-${field.editorId}`}
               checked={field.required || false}
               onCheckedChange={(checked) => onChange({ ...field, required: checked as boolean })}
             />
-            <Label htmlFor={`req-${field.name}-${depth}`} className="text-xs cursor-pointer">Req</Label>
+            <Label htmlFor={`req-${field.editorId}`} className="text-xs cursor-pointer">Req</Label>
           </div>
           {hasChildren && (
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setExpanded(!expanded)}>
@@ -504,18 +532,19 @@ const FieldEditor: React.FC<FieldEditorProps> = ({ field, onChange, onRemove, de
               <Plus className="h-3 w-3 mr-1" /> Field
             </Button>
           </div>
-          {(field.properties || []).map((prop, i) => (
+          {(field.properties || []).map((prop) => (
             <FieldEditor
-              key={i}
+              key={prop.editorId}
               field={prop}
               depth={depth + 1}
               onChange={(updated) => {
-                const newProps = [...(field.properties || [])];
-                newProps[i] = updated;
+                const newProps = (field.properties || []).map((existingProp) => (
+                  existingProp.editorId === prop.editorId ? updated : existingProp
+                ));
                 onChange({ ...field, properties: newProps });
               }}
               onRemove={() => {
-                const newProps = (field.properties || []).filter((_, idx) => idx !== i);
+                const newProps = (field.properties || []).filter((existingProp) => existingProp.editorId !== prop.editorId);
                 onChange({ ...field, properties: newProps });
               }}
             />
@@ -530,6 +559,7 @@ const FieldEditor: React.FC<FieldEditorProps> = ({ field, onChange, onRemove, de
             {field.type === 'CodeBlock[]' ? 'Code Block Item Definition' : 'Array Item Type'}
           </Label>
           <FieldEditor
+            key={field.items.editorId}
             field={field.items}
             depth={depth + 1}
             onChange={(updated) => onChange({ ...field, items: updated })}
@@ -553,7 +583,7 @@ const SchemaEditor: React.FC = () => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [llmInstructions, setLlmInstructions] = useState('');
-  const [fields, setFields] = useState<SchemaFieldDefinition[]>([]);
+  const [fields, setFields] = useState<EditorSchemaFieldDefinition[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -772,16 +802,17 @@ const SchemaEditor: React.FC = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {fields.map((field, index) => (
+          {fields.map((field) => (
             <FieldEditor
-              key={index}
+              key={field.editorId}
               field={field}
               onChange={(updated) => {
-                const newFields = [...fields];
-                newFields[index] = updated;
+                const newFields = fields.map((existingField) => (
+                  existingField.editorId === field.editorId ? updated : existingField
+                ));
                 setFields(newFields);
               }}
-              onRemove={() => setFields(fields.filter((_, i) => i !== index))}
+              onRemove={() => setFields(fields.filter((existingField) => existingField.editorId !== field.editorId))}
             />
           ))}
 

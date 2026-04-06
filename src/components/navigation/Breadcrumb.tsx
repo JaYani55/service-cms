@@ -56,10 +56,19 @@ const Breadcrumb: React.FC = () => {
       label: { en: 'Account Management', de: 'Kontoverwaltung' },
       parent: '/admin'
     },
+    '/admin/api': {
+      label: { en: 'API Administration', de: 'API Administration' },
+      parent: '/admin'
+    },
     '/pages': { label: { en: 'Pages', de: 'Seiten' } },
     '/pages/schema/new': {
       label: { en: 'New Schema', de: 'Neues Schema' },
       parent: '/pages'
+    },
+    '/forms': { label: { en: 'Forms', de: 'Formulare' } },
+    '/forms/new': {
+      label: { en: 'New Form', de: 'Neues Formular' },
+      parent: '/forms'
     },
     '/plugins': { label: { en: 'Plugins', de: 'Plugins' } },
   };
@@ -122,6 +131,20 @@ const Breadcrumb: React.FC = () => {
             path: currentPath,
             isActive: i === pathnames.length - 1
           });
+        } else if (currentPath.startsWith('/forms/')) {
+          const segments = currentPath.split('/');
+          if (segments.length === 3) {
+            breadcrumbs.push({
+              label: language === 'en' ? 'Form Details' : 'Formulardetails',
+              path: currentPath,
+              isActive: i === pathnames.length - 1,
+            });
+          } else if (segments.length === 4 && segments[3] === 'answers') {
+            breadcrumbs.push({
+              label: language === 'en' ? 'Answers' : 'Antworten',
+              isActive: true,
+            });
+          }
         } else if (currentPath.startsWith('/pages/schema/')) {
           // Handle dynamic pages/schema routes
           const segments = currentPath.split('/');

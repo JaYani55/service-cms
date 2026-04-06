@@ -73,6 +73,16 @@ export const AddContentBlock: React.FC<AddContentBlockProps> = ({ onAdd, prefix 
     });
   };
 
+  const addFormBlock = () => {
+    onAdd({
+      id: generateBlockId(),
+      type: 'form',
+      form_id: '',
+      form_slug: '',
+      form_name: '',
+    });
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -99,6 +109,9 @@ export const AddContentBlock: React.FC<AddContentBlockProps> = ({ onAdd, prefix 
         </DropdownMenuItem>
         <DropdownMenuItem onClick={addVideoBlock}>
           🎥 Video
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={addFormBlock}>
+          🧾 Formular
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
