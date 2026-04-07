@@ -6,6 +6,17 @@ import { cn } from "@/lib/utils"
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const
 
+const SAFE_COLOR_PATTERN = /^(#[0-9a-fA-F]{3,8}|(?:rgb|hsl)a?\([^;{}<>]+\)|(?:oklch|oklab|lab|lch)\([^;{}<>]+\)|var\(--[A-Za-z0-9_-]+\)|[A-Za-z]+)$/
+
+function sanitizeChartToken(value: string) {
+  return value.replace(/[^A-Za-z0-9_-]/g, "")
+}
+
+function sanitizeCssColor(value: string | undefined) {
+  if (!value) return null
+  return SAFE_COLOR_PATTERN.test(value.trim()) ? value.trim() : null
+}
+
 export type ChartConfig = {
   [k in string]: {
     label?: React.ReactNode
@@ -69,6 +80,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(
     ([_, config]) => config.theme || config.color
   )
+  const safeChartId = sanitizeChartToken(id)
 
   if (!colorConfig.length) {
     return null
@@ -80,14 +92,17 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
         __html: Object.entries(THEMES)
           .map(
             ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
+${prefix} [data-chart="${safeChartId}"] {
 ${colorConfig
   .map(([key, itemConfig]) => {
-    const color =
+    const color = sanitizeCssColor(
       itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
       itemConfig.color
-    return color ? `  --color-${key}: ${color};` : null
+    )
+    const safeKey = sanitizeChartToken(key)
+    return color && safeKey ? `  --color-${safeKey}: ${color};` : null
   })
+  .filter(Boolean)
   .join("\n")}
 }
 `

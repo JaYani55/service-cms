@@ -6,6 +6,7 @@
  */
 
 import { API_URL } from '@/lib/apiUrl';
+import { supabase } from '@/lib/supabase';
 
 export interface CfSecret {
   id: string;
@@ -110,8 +111,22 @@ interface ErrorResponse {
   error?: string;
 }
 
+async function createAuthenticatedHeaders(extraHeaders?: HeadersInit): Promise<Headers> {
+  const headers = new Headers(extraHeaders);
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  return headers;
+}
+
 export async function listSecrets(): Promise<CfSecret[]> {
-  const res = await fetch(`${API_URL}/api/secrets`);
+  const res = await fetch(`${API_URL}/api/secrets`, {
+    headers: await createAuthenticatedHeaders(),
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Unknown error' })) as ErrorResponse;
     throw new Error(err.error ?? `HTTP ${res.status}`);
@@ -121,14 +136,18 @@ export async function listSecrets(): Promise<CfSecret[]> {
 }
 
 export async function getEnvStatus(): Promise<EnvStatusEntry[]> {
-  const res = await fetch(`${API_URL}/api/secrets/env-status`);
+  const res = await fetch(`${API_URL}/api/secrets/env-status`, {
+    headers: await createAuthenticatedHeaders(),
+  });
   if (!res.ok) return [];
   const data = await res.json() as { status: EnvStatusEntry[] };
   return data.status ?? [];
 }
 
 export async function listStores(): Promise<CfStore[]> {
-  const res = await fetch(`${API_URL}/api/secrets/stores`);
+  const res = await fetch(`${API_URL}/api/secrets/stores`, {
+    headers: await createAuthenticatedHeaders(),
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Unknown error' })) as ErrorResponse;
     throw new Error(err.error ?? `HTTP ${res.status}`);
@@ -140,10 +159,10 @@ export async function listStores(): Promise<CfStore[]> {
 export async function upsertSecret(name: string, value: string, comment?: string): Promise<void> {
   const res = await fetch(`${API_URL}/api/secrets/${encodeURIComponent(name)}`, {
     method: 'POST',
-    headers: { 
+    headers: await createAuthenticatedHeaders({
       'Content-Type': 'application/json',
       'Accept': 'application/json' 
-    },
+    }),
     body: JSON.stringify({ value, comment: comment || '' }),
   });
   if (!res.ok) {
@@ -187,6 +206,7 @@ export async function testMediaConnection(): Promise<{ ok: boolean; itemCount?: 
 export async function deleteSecret(name: string): Promise<void> {
   const res = await fetch(`${API_URL}/api/secrets/${encodeURIComponent(name)}`, {
     method: 'DELETE',
+    headers: await createAuthenticatedHeaders(),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Unknown error' })) as ErrorResponse;

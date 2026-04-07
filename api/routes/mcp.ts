@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPTransport } from '@hono/mcp';
 import { z } from 'zod';
 import { createSupabaseClient, type Env } from '../lib/supabase';
+import { validateOutboundHttpUrl } from '../lib/urlSafety';
 
 const mcpRoute = new Hono<{ Bindings: Env }>();
 
@@ -221,9 +222,16 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
     'Check the health/reachability of a registered frontend domain.',
     { url: z.string().url().describe('The frontend URL to health-check') },
     async ({ url }) => {
+      const validatedUrl = validateOutboundHttpUrl(url);
+      if (!validatedUrl.ok) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ error: validatedUrl.error }, null, 2) }],
+        };
+      }
+
       const start = Date.now();
       try {
-        const response = await fetch(url, {
+        const response = await fetch(validatedUrl.url, {
           method: 'HEAD',
           signal: AbortSignal.timeout(5000),
         });
@@ -235,7 +243,7 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
               status: response.ok ? 'online' : 'offline',
               latency_ms: latency,
               http_status: response.status,
-              url,
+              url: validatedUrl.url.toString(),
             }, null, 2),
           }],
         };
@@ -248,7 +256,7 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
               status: 'offline',
               latency_ms: latency,
               reason: 'Connection failed or timed out',
-              url,
+              url: validatedUrl.url.toString(),
             }, null, 2),
           }],
         };

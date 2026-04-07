@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { requireAppRole } from '../lib/auth';
 import { createSupabaseClient, type Env } from '../lib/supabase';
 
 const logs = new Hono<{ Bindings: Env }>();
@@ -9,7 +10,10 @@ interface IpAddressRow {
 
 // GET /api/schemas/logs — List log entries (paginated, filterable)
 logs.get('/', async (c) => {
-  const supabase = await createSupabaseClient(c.env);
+  const auth = await requireAppRole(c, 'super-admin');
+  if (auth instanceof Response) return auth;
+
+  const supabase = await createSupabaseClient(c.env, auth.token);
 
   const page = parseInt(c.req.query('page') || '1', 10);
   const limit = Math.min(parseInt(c.req.query('limit') || '50', 10), 200);
@@ -50,7 +54,10 @@ logs.get('/', async (c) => {
 
 // GET /api/schemas/logs/stats — Aggregate stats for dashboard
 logs.get('/stats', async (c) => {
-  const supabase = await createSupabaseClient(c.env);
+  const auth = await requireAppRole(c, 'super-admin');
+  if (auth instanceof Response) return auth;
+
+  const supabase = await createSupabaseClient(c.env, auth.token);
 
   // Total logs
   const { count: total } = await supabase
@@ -92,7 +99,10 @@ logs.get('/stats', async (c) => {
 
 // GET /api/schemas/logs/download — Download logs as JSON file
 logs.get('/download', async (c) => {
-  const supabase = await createSupabaseClient(c.env);
+  const auth = await requireAppRole(c, 'super-admin');
+  if (auth instanceof Response) return auth;
+
+  const supabase = await createSupabaseClient(c.env, auth.token);
   const schemaSlug = c.req.query('schema_slug') || null;
   const from = c.req.query('from') || null;
   const to = c.req.query('to') || null;
@@ -126,7 +136,10 @@ logs.get('/download', async (c) => {
 
 // DELETE /api/schemas/logs — Clear all logs (or by filter)
 logs.delete('/', async (c) => {
-  const supabase = await createSupabaseClient(c.env);
+  const auth = await requireAppRole(c, 'super-admin');
+  if (auth instanceof Response) return auth;
+
+  const supabase = await createSupabaseClient(c.env, auth.token);
   const schemaSlug = c.req.query('schema_slug') || null;
   const before = c.req.query('before') || null; // ISO date — delete logs older than this
 
@@ -157,7 +170,10 @@ logs.delete('/', async (c) => {
 // DELETE /api/schemas/logs/:id — Delete a single log entry
 logs.delete('/:id', async (c) => {
   const id = c.req.param('id');
-  const supabase = await createSupabaseClient(c.env);
+  const auth = await requireAppRole(c, 'super-admin');
+  if (auth instanceof Response) return auth;
+
+  const supabase = await createSupabaseClient(c.env, auth.token);
 
   const { error } = await supabase
     .from('agent_logs')

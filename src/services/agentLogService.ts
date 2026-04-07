@@ -1,6 +1,19 @@
 import type { AgentLog, AgentLogStats, AgentLogPagination } from '@/types/pagebuilder';
 
 import { API_URL } from '@/lib/apiUrl';
+import { supabase } from '@/lib/supabase';
+
+async function createAuthenticatedHeaders(): Promise<Headers> {
+  const headers = new Headers();
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  return headers;
+}
 
 // --- Fetch Logs (paginated, filterable) ---
 
@@ -29,7 +42,7 @@ export const fetchLogs = async (params: FetchLogsParams = {}): Promise<FetchLogs
   if (params.from) url.searchParams.set('from', params.from);
   if (params.to) url.searchParams.set('to', params.to);
 
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), { headers: await createAuthenticatedHeaders() });
   if (!res.ok) throw new Error('Failed to fetch logs');
   return res.json();
 };
@@ -37,7 +50,7 @@ export const fetchLogs = async (params: FetchLogsParams = {}): Promise<FetchLogs
 // --- Fetch Stats ---
 
 export const fetchLogStats = async (): Promise<AgentLogStats> => {
-  const res = await fetch(`${API_URL}/api/schemas/logs/stats`);
+  const res = await fetch(`${API_URL}/api/schemas/logs/stats`, { headers: await createAuthenticatedHeaders() });
   if (!res.ok) throw new Error('Failed to fetch log stats');
   return res.json();
 };
@@ -50,7 +63,7 @@ export const downloadLogs = async (params: { schema_slug?: string; from?: string
   if (params.from) url.searchParams.set('from', params.from);
   if (params.to) url.searchParams.set('to', params.to);
 
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), { headers: await createAuthenticatedHeaders() });
   if (!res.ok) throw new Error('Failed to download logs');
 
   const blob = await res.blob();
@@ -66,16 +79,25 @@ export const downloadLogs = async (params: { schema_slug?: string; from?: string
 // --- Delete Logs ---
 
 export const deleteAllLogs = async (): Promise<void> => {
-  const res = await fetch(`${API_URL}/api/schemas/logs?confirm=true`, { method: 'DELETE' });
+  const res = await fetch(`${API_URL}/api/schemas/logs?confirm=true`, {
+    method: 'DELETE',
+    headers: await createAuthenticatedHeaders(),
+  });
   if (!res.ok) throw new Error('Failed to delete logs');
 };
 
 export const deleteLogsBySchema = async (schemaSlug: string): Promise<void> => {
-  const res = await fetch(`${API_URL}/api/schemas/logs?schema_slug=${encodeURIComponent(schemaSlug)}`, { method: 'DELETE' });
+  const res = await fetch(`${API_URL}/api/schemas/logs?schema_slug=${encodeURIComponent(schemaSlug)}`, {
+    method: 'DELETE',
+    headers: await createAuthenticatedHeaders(),
+  });
   if (!res.ok) throw new Error('Failed to delete logs');
 };
 
 export const deleteLogEntry = async (id: string): Promise<void> => {
-  const res = await fetch(`${API_URL}/api/schemas/logs/${id}`, { method: 'DELETE' });
+  const res = await fetch(`${API_URL}/api/schemas/logs/${id}`, {
+    method: 'DELETE',
+    headers: await createAuthenticatedHeaders(),
+  });
   if (!res.ok) throw new Error('Failed to delete log entry');
 };

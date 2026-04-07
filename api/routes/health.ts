@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { createSupabaseClient, type Env } from '../lib/supabase';
+import { validateOutboundHttpUrl } from '../lib/urlSafety';
 
 const health = new Hono<{ Bindings: Env }>();
 
@@ -27,9 +28,18 @@ health.get('/:slug/health', async (c) => {
   }
 
   const start = Date.now();
+  const validatedUrl = validateOutboundHttpUrl(schema.frontend_url);
+
+  if (!validatedUrl.ok) {
+    return c.json({
+      status: 'offline' as const,
+      latency_ms: 0,
+      reason: validatedUrl.error,
+    }, 400);
+  }
 
   try {
-    const response = await fetch(schema.frontend_url, {
+    const response = await fetch(validatedUrl.url, {
       method: 'HEAD',
       signal: AbortSignal.timeout(5000),
     });
@@ -62,10 +72,15 @@ health.post('/health/domain', async (c) => {
     return c.json({ error: 'url is required' }, 400);
   }
 
+  const validatedUrl = validateOutboundHttpUrl(url);
+  if (!validatedUrl.ok) {
+    return c.json({ error: validatedUrl.error }, 400);
+  }
+
   const start = Date.now();
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch(validatedUrl.url, {
       method: 'HEAD',
       signal: AbortSignal.timeout(5000),
     });
@@ -76,7 +91,7 @@ health.post('/health/domain', async (c) => {
       status: response.ok ? ('online' as const) : ('offline' as const),
       latency_ms: latency,
       http_status: response.status,
-      url,
+      url: validatedUrl.url.toString(),
     });
   } catch {
     const latency = Date.now() - start;
@@ -85,7 +100,7 @@ health.post('/health/domain', async (c) => {
       status: 'offline' as const,
       latency_ms: latency,
       reason: 'Connection failed or timed out',
-      url,
+      url: validatedUrl.url.toString(),
     });
   }
 });

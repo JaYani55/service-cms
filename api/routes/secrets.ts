@@ -15,6 +15,7 @@
  */
 
 import { Hono } from 'hono';
+import { requireAppRole } from '../lib/auth';
 import type { Env } from '../lib/supabase';
 
 const secrets = new Hono<{ Bindings: Env }>();
@@ -38,10 +39,18 @@ interface CloudflareApiResponse<T> {
   errors?: CloudflareErrorItem[];
 }
 
-type SecretEnvKey =
+type SecretStatusName =
   | 'SUPABASE_URL'
   | 'SUPABASE_PUBLISHABLE_KEY'
   | 'SUPABASE_SECRET_KEY'
+  | 'STORAGE_PROVIDER'
+  | 'STORAGE_BUCKET'
+  | 'R2_PUBLIC_URL'
+  | 'CF_API_TOKEN';
+
+type SecretEnvKey =
+  | 'SUPABASE_URL'
+  | 'SUPABASE_PUBLISHABLE_KEY'
   | 'STORAGE_PROVIDER'
   | 'STORAGE_BUCKET'
   | 'R2_PUBLIC_URL'
@@ -57,6 +66,10 @@ type SecretStoreBindingKey =
 
 function getCloudflareErrorMessage<T>(json: CloudflareApiResponse<T>, fallback = 'CF API error') {
   return json.errors?.[0]?.message ?? fallback;
+}
+
+function jsonError(body: unknown, status: number) {
+  return Response.json(body, { status });
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -84,6 +97,9 @@ function missingConfig(env: Env) {
  * List all secrets in the Secrets Store (names + metadata only — values never returned).
  */
 secrets.get('/', async (c) => {
+  const auth = await requireAppRole(c, 'super-admin');
+  if (auth instanceof Response) return auth;
+
   const configErr = missingConfig(c.env);
   if (configErr) return c.json({ error: configErr }, 503);
 
@@ -93,7 +109,7 @@ secrets.get('/', async (c) => {
   const json = await res.json() as CloudflareApiResponse<CloudflareSecret[]>;
 
   if (!res.ok) {
-    return c.json({ error: getCloudflareErrorMessage(json), cf: json }, res.status);
+    return jsonError({ error: getCloudflareErrorMessage(json), cf: json }, res.status);
   }
 
   return c.json({ secrets: json.result ?? [] });
@@ -105,10 +121,10 @@ secrets.get('/', async (c) => {
  * Checks both plain env vars (wrangler.jsonc vars) and Secrets Store bindings.
  * Values are NEVER returned — only boolean presence.
  */
-const KNOWN_KEYS: Array<{ name: SecretEnvKey; envKey: SecretEnvKey; ssKey?: SecretStoreBindingKey }> = [
+const KNOWN_KEYS: Array<{ name: SecretStatusName; envKey?: SecretEnvKey; ssKey?: SecretStoreBindingKey }> = [
   { name: 'SUPABASE_URL',            envKey: 'SUPABASE_URL',            ssKey: 'SS_SUPABASE_URL' },
   { name: 'SUPABASE_PUBLISHABLE_KEY', envKey: 'SUPABASE_PUBLISHABLE_KEY', ssKey: 'SS_SUPABASE_PUBLISHABLE_KEY' },
-  { name: 'SUPABASE_SECRET_KEY',      envKey: 'SUPABASE_URL',            ssKey: 'SS_SUPABASE_SECRET_KEY' }, // no plain fallback by design
+  { name: 'SUPABASE_SECRET_KEY',                                      ssKey: 'SS_SUPABASE_SECRET_KEY' },
   { name: 'STORAGE_PROVIDER',        envKey: 'STORAGE_PROVIDER',  ssKey: 'SS_STORAGE_PROVIDER' },
   { name: 'STORAGE_BUCKET',          envKey: 'STORAGE_BUCKET',    ssKey: 'SS_STORAGE_BUCKET' },
   { name: 'R2_PUBLIC_URL',           envKey: 'R2_PUBLIC_URL',     ssKey: 'SS_R2_PUBLIC_URL' },
@@ -116,18 +132,23 @@ const KNOWN_KEYS: Array<{ name: SecretEnvKey; envKey: SecretEnvKey; ssKey?: Secr
 ];
 
 secrets.get('/env-status', (c) => {
-  const env = c.env;
-  const status: Array<{ name: string; hasValue: boolean; source: 'secrets-store' | 'env-var' | 'unset' }> = KNOWN_KEYS.map(({ name, envKey, ssKey }) => {
-    const fromSS = ssKey ? !!env[ssKey] : false;
-    // For SUPABASE_SECRET_KEY there is intentionally no plain env fallback
-    const fromEnv = name !== 'SUPABASE_SECRET_KEY' ? !!env[envKey] : false;
-    return {
-      name,
-      hasValue: fromSS || fromEnv,
-      source: fromSS ? 'secrets-store' : fromEnv ? 'env-var' : 'unset',
-    };
+  const authPromise = requireAppRole(c, 'super-admin');
+  return authPromise.then((auth) => {
+    if (auth instanceof Response) return auth;
+
+    const env = c.env;
+    const status: Array<{ name: string; hasValue: boolean; source: 'secrets-store' | 'env-var' | 'unset' }> = KNOWN_KEYS.map(({ name, envKey, ssKey }) => {
+      const fromSS = ssKey ? !!env[ssKey] : false;
+      // For SUPABASE_SECRET_KEY there is intentionally no plain env fallback
+      const fromEnv = envKey ? !!env[envKey] : false;
+      return {
+        name,
+        hasValue: fromSS || fromEnv,
+        source: fromSS ? 'secrets-store' : fromEnv ? 'env-var' : 'unset',
+      };
+    });
+    return c.json({ status });
   });
-  return c.json({ status });
 });
 
 /**
@@ -135,6 +156,9 @@ secrets.get('/env-status', (c) => {
  * List all Secrets Stores in the account. Useful for discovering the store ID.
  */
 secrets.get('/stores', async (c) => {
+  const auth = await requireAppRole(c, 'super-admin');
+  if (auth instanceof Response) return auth;
+
   const token = c.env.CF_API_TOKEN;
   const accountId = c.env.CF_ACCOUNT_ID;
 
@@ -147,7 +171,7 @@ secrets.get('/stores', async (c) => {
   const json = await res.json() as CloudflareApiResponse<Array<{ id: string; name: string; created_at?: string }>>;
 
   if (!res.ok) {
-    return c.json({ error: getCloudflareErrorMessage(json), cf: json }, res.status);
+    return jsonError({ error: getCloudflareErrorMessage(json), cf: json }, res.status);
   }
 
   return c.json({ stores: json.result ?? [] });
@@ -159,6 +183,9 @@ secrets.get('/stores', async (c) => {
  * Body: { value: string, comment?: string }
  */
 secrets.post('/:name', async (c) => {
+  const auth = await requireAppRole(c, 'super-admin');
+  if (auth instanceof Response) return auth;
+
   const configErr = missingConfig(c.env);
   if (configErr) return c.json({ error: configErr }, 503);
 
@@ -215,7 +242,7 @@ secrets.post('/:name', async (c) => {
   const json = await res.json() as CloudflareApiResponse<CloudflareSecret>;
 
   if (!res.ok) {
-    return c.json({ error: getCloudflareErrorMessage(json), cf: json }, res.status);
+    return jsonError({ error: getCloudflareErrorMessage(json), cf: json }, res.status);
   }
 
   return c.json({
@@ -230,6 +257,9 @@ secrets.post('/:name', async (c) => {
  * Delete a secret by name.
  */
 secrets.delete('/:name', async (c) => {
+  const auth = await requireAppRole(c, 'super-admin');
+  if (auth instanceof Response) return auth;
+
   const configErr = missingConfig(c.env);
   if (configErr) return c.json({ error: configErr }, 503);
 
@@ -252,7 +282,7 @@ secrets.delete('/:name', async (c) => {
 
   if (!res.ok) {
     const json = await res.json() as CloudflareApiResponse<unknown>;
-    return c.json({ error: getCloudflareErrorMessage(json), cf: json }, res.status);
+    return jsonError({ error: getCloudflareErrorMessage(json), cf: json }, res.status);
   }
 
   return c.json({ success: true, deleted: secretName });

@@ -13,6 +13,50 @@ function extractErrorMessage(value: unknown): string | null {
   return typeof error === 'string' ? error : null;
 }
 
+const SENSITIVE_KEY_PATTERN = /(password|secret|token|authorization|api[-_]?key|access[-_]?token|refresh[-_]?token)/i;
+const MAX_LOG_STRING_LENGTH = 512;
+const MAX_LOG_ARRAY_ITEMS = 50;
+const MAX_LOG_DEPTH = 4;
+
+function shouldSkipBodyLogging(pathname: string): boolean {
+  return /^\/api\/forms\/(share\/[^/]+\/answers|[^/]+\/answers)$/.test(pathname)
+    || pathname === '/api/media/upload';
+}
+
+function sanitizeLogValue(value: unknown, depth = 0): JsonValue {
+  if (value === null || typeof value === 'boolean' || typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    return value.length > MAX_LOG_STRING_LENGTH
+      ? `${value.slice(0, MAX_LOG_STRING_LENGTH)}...[truncated]`
+      : value;
+  }
+
+  if (depth >= MAX_LOG_DEPTH) {
+    return '[truncated]';
+  }
+
+  if (Array.isArray(value)) {
+    return value.slice(0, MAX_LOG_ARRAY_ITEMS).map((entry) => sanitizeLogValue(entry, depth + 1));
+  }
+
+  if (!value || typeof value !== 'object') {
+    return String(value);
+  }
+
+  const sanitizedEntries = Object.entries(value as Record<string, unknown>).map(([key, entryValue]) => {
+    if (SENSITIVE_KEY_PATTERN.test(key)) {
+      return [key, '[redacted]'] as const;
+    }
+
+    return [key, sanitizeLogValue(entryValue, depth + 1)] as const;
+  });
+
+  return Object.fromEntries(sanitizedEntries);
+}
+
 /**
  * Hono middleware that logs every request/response to the agent_logs table.
  * Captures method, path, status, duration, request/response bodies, IP, and user-agent.
@@ -29,6 +73,7 @@ export const agentLogger: MiddlewareHandler<{ Bindings: Env }> = async (c, next)
 
   const start = Date.now();
   const method = c.req.method;
+  const skipBodyLogging = shouldSkipBodyLogging(url.pathname);
 
   // Extract IP and user-agent
   const ip = c.req.header('cf-connecting-ip')
@@ -40,9 +85,9 @@ export const agentLogger: MiddlewareHandler<{ Bindings: Env }> = async (c, next)
   // to avoid interfering with the body stream in Cloudflare Workers).
   let requestBody: unknown = null;
   const contentType = c.req.header('content-type') || '';
-  if (['POST', 'PUT', 'PATCH'].includes(method) && !contentType.includes('multipart/form-data')) {
+  if (!skipBodyLogging && ['POST', 'PUT', 'PATCH'].includes(method) && !contentType.includes('multipart/form-data')) {
     try {
-      requestBody = await c.req.raw.clone().json();
+      requestBody = sanitizeLogValue(await c.req.raw.clone().json());
     } catch {
       // Not JSON or empty body — that's fine
     }
@@ -65,8 +110,8 @@ export const agentLogger: MiddlewareHandler<{ Bindings: Env }> = async (c, next)
   let responseBody: unknown = null;
   try {
     const ct = c.res.headers.get('content-type') || '';
-    if (ct.includes('application/json')) {
-      responseBody = await c.res.clone().json();
+    if (!skipBodyLogging && ct.includes('application/json')) {
+      responseBody = sanitizeLogValue(await c.res.clone().json());
     }
   } catch {
     // Skip non-JSON responses
