@@ -14,6 +14,16 @@ create table public.page_schemas (
   revalidation_endpoint text null,
   revalidation_secret text null,
   slug_structure text not null default '/:slug'::text,
+  integration_requirements jsonb not null default jsonb_build_object(
+    'canonical_frontend_url', null,
+    'required_slug_structure', null,
+    'route_base_path', null,
+    'route_ownership', 'isolated',
+    'allow_temporary_frontend_urls', true,
+    'page_discovery_mode', 'schema-scoped-api',
+    'schema_identification_hint', null,
+    'registration_notes', null
+  ),
   is_default boolean not null default false,
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),

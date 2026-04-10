@@ -118,6 +118,32 @@ export interface PageBuilderData {
 
 export type SchemaRegistrationStatus = 'pending' | 'waiting' | 'registered' | 'archived';
 
+export type SchemaRouteOwnership = 'isolated' | 'shared-layout-only' | 'may-modify-existing';
+
+export type SchemaPageDiscoveryMode = 'schema-scoped-api' | 'supabase-by-schema' | 'infer-content-shape';
+
+export interface SchemaIntegrationRequirements {
+  canonical_frontend_url: string | null;
+  required_slug_structure: string | null;
+  route_base_path: string | null;
+  route_ownership: SchemaRouteOwnership;
+  allow_temporary_frontend_urls: boolean;
+  page_discovery_mode: SchemaPageDiscoveryMode;
+  schema_identification_hint: string | null;
+  registration_notes: string | null;
+}
+
+export const DEFAULT_SCHEMA_INTEGRATION_REQUIREMENTS: SchemaIntegrationRequirements = {
+  canonical_frontend_url: null,
+  required_slug_structure: null,
+  route_base_path: null,
+  route_ownership: 'isolated',
+  allow_temporary_frontend_urls: true,
+  page_discovery_mode: 'schema-scoped-api',
+  schema_identification_hint: null,
+  registration_notes: null,
+};
+
 export interface PageSchema {
   id: string;
   name: string;
@@ -132,6 +158,7 @@ export interface PageSchema {
   revalidation_secret: string | null;
   revalidation_secret_name: string | null;
   slug_structure: string;
+  integration_requirements: SchemaIntegrationRequirements | null;
   is_default: boolean;
   created_at: string;
   updated_at: string;

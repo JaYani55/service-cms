@@ -10,6 +10,11 @@ import {
   upsertManagedSecret,
 } from '../lib/managedSecrets';
 import { validateOutboundHttpUrl } from '../lib/urlSafety';
+import {
+  isFrontendUrlAllowed,
+  normalizeSchemaIntegrationRequirements,
+  validateSlugStructure,
+} from '../lib/schemaRouting';
 
 const mcpRoute = new Hono<{ Bindings: Env }>();
 
@@ -20,6 +25,8 @@ interface SchemaListRow {
   registration_status: string | null;
   is_default: boolean | null;
   frontend_url: string | null;
+  slug_structure?: string | null;
+  integration_requirements?: Record<string, unknown> | null;
 }
 
 // ─── MCP Server Factory ─────────────────────────────────────────────────────
@@ -42,7 +49,7 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
     async () => {
       const { data, error } = await supabase
         .from('page_schemas')
-        .select('slug, name, description, registration_status, is_default, frontend_url, created_at, updated_at')
+        .select('slug, name, description, registration_status, is_default, frontend_url, slug_structure, integration_requirements, created_at, updated_at')
         .order('is_default', { ascending: false })
         .order('name', { ascending: true });
 
@@ -57,7 +64,11 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
         status: s.registration_status,
         is_default: s.is_default,
         frontend_url: s.frontend_url,
+        slug_structure: s.slug_structure,
+        integration_requirements: normalizeSchemaIntegrationRequirements(s.integration_requirements),
         spec_url: `${baseUrl}/api/schemas/${s.slug}/spec.txt`,
+        spec_json_url: `${baseUrl}/api/schemas/${s.slug}/spec`,
+        pages_url: `${baseUrl}/api/schemas/${s.slug}/pages`,
         register_url: `${baseUrl}/api/schemas/${s.slug}/register`,
       }));
 
@@ -147,10 +158,10 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
           'Body (JSON):',
           JSON.stringify({
             code: schema.registration_code,
-            frontend_url: 'https://your-frontend.com',
+            frontend_url: normalizeSchemaIntegrationRequirements(schema.integration_requirements).canonical_frontend_url || 'https://your-frontend.com',
             revalidation_endpoint: '/api/revalidate',
             revalidation_secret: 'your-shared-secret',
-            slug_structure: '/:slug',
+            slug_structure: normalizeSchemaIntegrationRequirements(schema.integration_requirements).required_slug_structure || schema.slug_structure || '/:slug',
           }, null, 2),
           '',
         );
@@ -177,7 +188,7 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
     async ({ slug, code, frontend_url, revalidation_endpoint, revalidation_secret, slug_structure }) => {
       const { data: schema, error } = await supabase
         .from('page_schemas')
-        .select('id, slug, registration_code, registration_status, revalidation_secret_name')
+        .select('id, slug, registration_code, registration_status, revalidation_secret_name, slug_structure, integration_requirements')
         .eq('slug', slug)
         .single();
 
@@ -193,6 +204,24 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
         return { content: [{ type: 'text' as const, text: 'Invalid registration code.' }] };
       }
 
+      const validatedFrontendUrl = validateOutboundHttpUrl(frontend_url);
+      if (!validatedFrontendUrl.ok) {
+        return { content: [{ type: 'text' as const, text: validatedFrontendUrl.error }] };
+      }
+
+      const frontendPolicy = isFrontendUrlAllowed(validatedFrontendUrl.url.origin, schema.integration_requirements);
+      if (!frontendPolicy.ok) {
+        return { content: [{ type: 'text' as const, text: frontendPolicy.error || 'frontend_url rejected by schema policy.' }] };
+      }
+
+      const slugStructureValidation = validateSlugStructure(
+        slug_structure || normalizeSchemaIntegrationRequirements(schema.integration_requirements).required_slug_structure || schema.slug_structure || '/:slug',
+        schema.integration_requirements,
+      );
+      if (!slugStructureValidation.ok) {
+        return { content: [{ type: 'text' as const, text: slugStructureValidation.error || 'Invalid slug_structure.' }] };
+      }
+
       const secretName = revalidation_secret?.trim()
         ? (schema.revalidation_secret_name || buildRevalidationSecretName(schema.id))
         : schema.revalidation_secret_name;
@@ -205,7 +234,7 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
           metadata: {
             schema_id: schema.id,
             schema_slug: schema.slug,
-            frontend_url,
+            frontend_url: validatedFrontendUrl.url.origin,
           },
         });
       }
@@ -216,11 +245,11 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
         .update({
           registration_status: 'registered',
           registration_code: null,
-          frontend_url,
-          revalidation_endpoint: revalidation_endpoint || null,
+          frontend_url: validatedFrontendUrl.url.origin,
+          revalidation_endpoint: revalidation_endpoint?.trim() ? (revalidation_endpoint.startsWith('/') ? revalidation_endpoint : `/${revalidation_endpoint}`) : null,
           revalidation_secret: null,
           revalidation_secret_name: secretName ?? null,
-          slug_structure: slug_structure || '/:slug',
+          slug_structure: slugStructureValidation.normalized,
         })
         .eq('id', schema.id);
 
@@ -234,7 +263,7 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
           text: JSON.stringify({
             success: true,
             message: 'Frontend registered successfully',
-            schema: { slug, frontend_url, slug_structure: slug_structure || '/:slug' },
+            schema: { slug, frontend_url: validatedFrontendUrl.url.origin, slug_structure: slugStructureValidation.normalized },
           }, null, 2),
         }],
       };

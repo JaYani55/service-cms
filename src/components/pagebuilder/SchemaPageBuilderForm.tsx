@@ -43,6 +43,7 @@ import type { PageRecord, PageSchema, SchemaFieldDefinition, ContentBlock, CodeB
 import { StandaloneContentBlockEditor } from './StandaloneContentBlockEditor';
 import { ImageUploader } from './ImageUploader';
 import { JsonImporter } from './JsonImporter';
+import { buildSchemaPageUrl, getExpectedSlugStructure } from '@/utils/schemaRouting';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -834,9 +835,7 @@ export const SchemaPageBuilderForm: React.FC<SchemaPageBuilderFormProps> = ({
   // ── Build preview URL from schema config
   const previewUrl =
     savedSlug && schema.frontend_url
-      ? `${schema.frontend_url.replace(/\/$/, '')}${(schema.slug_structure || '/:slug')
-          .replace(':slug', savedSlug)
-          .replace(/^([^/])/, '/$1')}`
+      ? buildSchemaPageUrl(schema.frontend_url, getExpectedSlugStructure(schema), savedSlug)
       : null;
 
   return (
@@ -885,7 +884,7 @@ export const SchemaPageBuilderForm: React.FC<SchemaPageBuilderFormProps> = ({
               </div>
               {schema.frontend_url ? (
                 <p className="text-xs text-muted-foreground">
-                  <span className="font-mono">{schema.frontend_url.replace(/\/$/, '')}/{pageSlug}</span>
+                  <span className="font-mono">{buildSchemaPageUrl(schema.frontend_url, getExpectedSlugStructure(schema), pageSlug || 'example-slug')}</span>
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">

@@ -19,10 +19,18 @@ import {
   getSchema,
   startSchemaRegistration,
 } from '@/services/pageService';
-import type { SchemaFieldDefinition, PageSchema, PageSchemaTemplate, SchemaTemplateDefinition } from '@/types/pagebuilder';
+import {
+  DEFAULT_SCHEMA_INTEGRATION_REQUIREMENTS,
+  type SchemaFieldDefinition,
+  type PageSchema,
+  type PageSchemaTemplate,
+  type SchemaTemplateDefinition,
+  type SchemaIntegrationRequirements,
+} from '@/types/pagebuilder';
 import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
 import { SCHEMA_TEMPLATES, type SchemaTemplate } from '@/config/schemaTemplates';
+import { normalizeSchemaIntegrationRequirements } from '@/utils/schemaRouting';
 
 const FIELD_TYPES = ['string', 'number', 'boolean', 'array', 'object', 'ContentBlock[]', 'CodeBlock[]', 'media'] as const;
 const VALID_SCHEMA_TYPES = new Set<string>(FIELD_TYPES);
@@ -621,6 +629,7 @@ const SchemaEditor: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [existingSchema, setExistingSchema] = useState<PageSchema | null>(null);
+  const [integrationRequirements, setIntegrationRequirements] = useState<SchemaIntegrationRequirements>(DEFAULT_SCHEMA_INTEGRATION_REQUIREMENTS);
   const [schemaJsonInput, setSchemaJsonInput] = useState('');
   const [schemaJsonResult, setSchemaJsonResult] = useState<SchemaJsonParseResult | null>(null);
   const [availableTemplates, setAvailableTemplates] = useState<SchemaTemplateDefinition[]>(SCHEMA_TEMPLATES);
@@ -635,6 +644,7 @@ const SchemaEditor: React.FC = () => {
           setName(data.name);
           setDescription(data.description || '');
           setLlmInstructions(data.llm_instructions || '');
+          setIntegrationRequirements(normalizeSchemaIntegrationRequirements(data.integration_requirements));
           setFields(jsonSchemaToFields(data.schema as Record<string, unknown>));
         })
         .catch((err) => {
@@ -662,6 +672,25 @@ const SchemaEditor: React.FC = () => {
       return;
     }
 
+    const normalizedIntegrationRequirements = normalizeSchemaIntegrationRequirements(integrationRequirements);
+    if (normalizedIntegrationRequirements.required_slug_structure && !normalizedIntegrationRequirements.required_slug_structure.includes(':slug')) {
+      toast.error(language === 'en'
+        ? 'Required slug structure must contain :slug'
+        : 'Die erforderliche Slug-Struktur muss :slug enthalten');
+      return;
+    }
+
+    if (normalizedIntegrationRequirements.canonical_frontend_url) {
+      try {
+        new URL(normalizedIntegrationRequirements.canonical_frontend_url);
+      } catch {
+        toast.error(language === 'en'
+          ? 'Canonical frontend URL must be a valid absolute URL'
+          : 'Die kanonische Frontend-URL muss eine gültige absolute URL sein');
+        return;
+      }
+    }
+
     setIsSaving(true);
     try {
       const schemaJson = fieldsToJsonSchema(fields);
@@ -672,6 +701,7 @@ const SchemaEditor: React.FC = () => {
           description,
           schema: schemaJson,
           llm_instructions: llmInstructions,
+          integration_requirements: normalizedIntegrationRequirements,
         });
         toast.success(language === 'en' ? 'Schema updated' : 'Schema aktualisiert');
         navigate(`/pages/schema/${existingSchema.slug}`);
@@ -681,6 +711,7 @@ const SchemaEditor: React.FC = () => {
           description,
           schema: schemaJson,
           llm_instructions: llmInstructions,
+          integration_requirements: normalizedIntegrationRequirements,
         });
         toast.success(language === 'en' ? 'Schema created' : 'Schema erstellt');
         navigate(`/pages/schema/${newSchema.slug}`);
@@ -865,6 +896,185 @@ const SchemaEditor: React.FC = () => {
                 rows={3}
               />
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <span>🧭</span>
+            <span>{language === 'en' ? 'Frontend Integration Contract' : 'Frontend-Integrationsvertrag'}</span>
+          </CardTitle>
+          <CardDescription>
+            {language === 'en'
+              ? 'Define the exact route shape, domain policy, and page discovery expectations before registration starts.'
+              : 'Definiere die exakte Routenform, Domain-Richtlinie und Erwartungen an die Seitenermittlung, bevor die Registrierung beginnt.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="canonical-frontend-url" className="text-base font-semibold">
+                {language === 'en' ? 'Canonical Frontend URL' : 'Kanonische Frontend-URL'}
+              </Label>
+              <Input
+                id="canonical-frontend-url"
+                value={integrationRequirements.canonical_frontend_url || ''}
+                onChange={(event) => setIntegrationRequirements((current) => ({
+                  ...current,
+                  canonical_frontend_url: event.target.value,
+                }))}
+                placeholder="https://service-cms.com"
+              />
+              <p className="text-xs text-muted-foreground">
+                {language === 'en'
+                  ? 'Used as the expected production origin during registration when temporary domains are disallowed.'
+                  : 'Wird während der Registrierung als erwartete Produktions-Origin verwendet, wenn temporäre Domains nicht erlaubt sind.'}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="required-slug-structure" className="text-base font-semibold">
+                {language === 'en' ? 'Required Slug Structure' : 'Erforderliche Slug-Struktur'}
+              </Label>
+              <Input
+                id="required-slug-structure"
+                value={integrationRequirements.required_slug_structure || ''}
+                onChange={(event) => setIntegrationRequirements((current) => ({
+                  ...current,
+                  required_slug_structure: event.target.value,
+                }))}
+                placeholder="/docs/:slug"
+              />
+              <p className="text-xs text-muted-foreground">
+                {language === 'en'
+                  ? 'The frontend must register with this exact route pattern. Include :slug exactly once.'
+                  : 'Das Frontend muss sich mit genau diesem Routenmuster registrieren. :slug muss genau einmal enthalten sein.'}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="route-base-path" className="text-base font-semibold">
+                {language === 'en' ? 'Route Base Path' : 'Routen-Basispfad'}
+              </Label>
+              <Input
+                id="route-base-path"
+                value={integrationRequirements.route_base_path || ''}
+                onChange={(event) => setIntegrationRequirements((current) => ({
+                  ...current,
+                  route_base_path: event.target.value,
+                }))}
+                placeholder="/docs"
+              />
+              <p className="text-xs text-muted-foreground">
+                {language === 'en'
+                  ? 'Use this when the schema must stay inside a dedicated route segment such as /docs.'
+                  : 'Verwende dies, wenn das Schema in einem dedizierten Routensegment wie /docs bleiben muss.'}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-base font-semibold">
+                {language === 'en' ? 'Route Ownership' : 'Routen-Verantwortung'}
+              </Label>
+              <Select
+                value={integrationRequirements.route_ownership}
+                onValueChange={(value) => setIntegrationRequirements((current) => ({
+                  ...current,
+                  route_ownership: value as SchemaIntegrationRequirements['route_ownership'],
+                }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="isolated">{language === 'en' ? 'Isolated route only' : 'Nur isolierte Route'}</SelectItem>
+                  <SelectItem value="shared-layout-only">{language === 'en' ? 'Shared layout or styling only' : 'Nur gemeinsames Layout oder Styling'}</SelectItem>
+                  <SelectItem value="may-modify-existing">{language === 'en' ? 'Existing routes may be modified' : 'Bestehende Routen dürfen angepasst werden'}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-base font-semibold">
+                {language === 'en' ? 'Page Discovery Mode' : 'Seiten-Ermittlungsmodus'}
+              </Label>
+              <Select
+                value={integrationRequirements.page_discovery_mode}
+                onValueChange={(value) => setIntegrationRequirements((current) => ({
+                  ...current,
+                  page_discovery_mode: value as SchemaIntegrationRequirements['page_discovery_mode'],
+                }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="schema-scoped-api">{language === 'en' ? 'Schema-scoped API' : 'Schema-spezifische API'}</SelectItem>
+                  <SelectItem value="supabase-by-schema">{language === 'en' ? 'Supabase by schema_id' : 'Supabase über schema_id'}</SelectItem>
+                  <SelectItem value="infer-content-shape">{language === 'en' ? 'Infer from content shape' : 'Aus Content-Struktur ableiten'}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-end">
+              <label className="flex items-center gap-3 rounded-lg border px-4 py-3 w-full cursor-pointer">
+                <Checkbox
+                  checked={integrationRequirements.allow_temporary_frontend_urls}
+                  onCheckedChange={(checked) => setIntegrationRequirements((current) => ({
+                    ...current,
+                    allow_temporary_frontend_urls: Boolean(checked),
+                  }))}
+                />
+                <div>
+                  <div className="font-medium text-sm">
+                    {language === 'en' ? 'Allow temporary domains' : 'Temporäre Domains erlauben'}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {language === 'en'
+                      ? 'Disable this to force registration against the canonical production URL only.'
+                      : 'Deaktivieren, um die Registrierung nur gegen die kanonische Produktions-URL zu erlauben.'}
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="schema-identification-hint" className="text-base font-semibold">
+              {language === 'en' ? 'Schema Identification Hint' : 'Hinweis zur Schema-Erkennung'}
+            </Label>
+            <Textarea
+              id="schema-identification-hint"
+              value={integrationRequirements.schema_identification_hint || ''}
+              onChange={(event) => setIntegrationRequirements((current) => ({
+                ...current,
+                schema_identification_hint: event.target.value,
+              }))}
+              rows={2}
+              placeholder={language === 'en'
+                ? 'Example: Use GET /api/schemas/<slug>/pages. Do not infer membership from overlapping content shapes.'
+                : 'Beispiel: Verwende GET /api/schemas/<slug>/pages. Leite die Zugehörigkeit nicht aus überlappenden Content-Strukturen ab.'}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="registration-notes" className="text-base font-semibold">
+              {language === 'en' ? 'Registration Notes' : 'Registrierungsnotizen'}
+            </Label>
+            <Textarea
+              id="registration-notes"
+              value={integrationRequirements.registration_notes || ''}
+              onChange={(event) => setIntegrationRequirements((current) => ({
+                ...current,
+                registration_notes: event.target.value,
+              }))}
+              rows={3}
+              placeholder={language === 'en'
+                ? 'Example: Do not register until https://service-cms.com/docs returns 200.'
+                : 'Beispiel: Nicht registrieren, bevor https://service-cms.com/docs den Status 200 liefert.'}
+            />
           </div>
         </CardContent>
       </Card>

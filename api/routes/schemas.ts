@@ -10,6 +10,13 @@ import {
   upsertManagedSecret,
   getRevalidationSecretNamespace,
 } from '../lib/managedSecrets';
+import {
+  buildSchemaPagePath,
+  isFrontendUrlAllowed,
+  normalizeSchemaIntegrationRequirements,
+  type SchemaIntegrationRequirementsRecord,
+  validateSlugStructure,
+} from '../lib/schemaRouting';
 
 const schemas = new Hono<{ Bindings: Env }>();
 
@@ -21,6 +28,8 @@ interface SchemaRow {
   registration_status: string | null;
   is_default: boolean | null;
   frontend_url: string | null;
+  slug_structure: string | null;
+  integration_requirements: SchemaIntegrationRequirementsRecord | null;
   created_at: string;
   updated_at: string;
 }
@@ -41,6 +50,196 @@ interface SchemaSecretStatusRow {
   revalidation_secret: string | null;
   revalidation_secret_name: string | null;
   registration_status: string;
+  slug_structure?: string | null;
+  integration_requirements?: SchemaIntegrationRequirementsRecord | null;
+}
+
+interface PublishedSchemaPageRow {
+  id: string;
+  slug: string;
+  name: string;
+  status: 'published';
+  content: Record<string, unknown>;
+  domain_url: string | null;
+  updated_at: string;
+}
+
+function normalizeRevalidationEndpoint(value?: string | null): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+}
+
+function buildSpecSections(
+  schema: {
+    id: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    registration_status: string;
+    is_default?: boolean | null;
+    created_at?: string;
+    updated_at?: string;
+    schema: Record<string, unknown>;
+    llm_instructions: string | null;
+    frontend_url: string | null;
+    revalidation_endpoint: string | null;
+    registration_code: string | null;
+    slug_structure: string;
+    integration_requirements: SchemaIntegrationRequirementsRecord | null;
+  },
+  count: number,
+  baseUrl: string,
+): string[] {
+  const requirements = normalizeSchemaIntegrationRequirements(schema.integration_requirements);
+  const expectedSlugStructure = requirements.required_slug_structure || schema.slug_structure || '/:slug';
+  const pagesUrl = `${baseUrl}/api/schemas/${schema.slug}/pages`;
+
+  const lines: string[] = [
+    '='.repeat(60),
+    `SCHEMA SPECIFICATION: ${schema.name}`,
+    '='.repeat(60),
+    '',
+    `Name: ${schema.name}`,
+    `Slug: ${schema.slug}`,
+    `Status: ${schema.registration_status}`,
+    `Default: ${schema.is_default ? 'Yes' : 'No'}`,
+    `Pages using this schema: ${count ?? 0}`,
+    schema.created_at ? `Created: ${schema.created_at}` : null,
+    schema.updated_at ? `Updated: ${schema.updated_at}` : null,
+    '',
+  ].filter((line): line is string => line !== null);
+
+  if (schema.description) {
+    lines.push('--- DESCRIPTION ---', schema.description, '');
+  }
+
+  lines.push(
+    '--- REQUIREMENTS ---',
+    '',
+    `- Public route shape: ${expectedSlugStructure}`,
+    `- Route ownership: ${requirements.route_ownership}`,
+    `- Canonical frontend URL: ${requirements.canonical_frontend_url || 'Not fixed by schema'}`,
+    `- Temporary frontend URLs allowed: ${requirements.allow_temporary_frontend_urls ? 'Yes' : 'No'}`,
+    `- Preferred page discovery: ${requirements.page_discovery_mode}`,
+    `- Published pages API: ${pagesUrl}`,
+    '',
+  );
+
+  if (requirements.schema_identification_hint) {
+    lines.push(`- Schema identification hint: ${requirements.schema_identification_hint}`);
+  }
+
+  if (requirements.registration_notes) {
+    lines.push(`- Registration notes: ${requirements.registration_notes}`);
+  }
+
+  lines.push('');
+
+  lines.push(
+    '--- DO NOT CHANGE ---',
+    '',
+    requirements.route_ownership === 'isolated'
+      ? '- Keep the implementation isolated to the configured route space. Do not replace unrelated dynamic routes.'
+      : requirements.route_ownership === 'shared-layout-only'
+        ? '- Existing routes may only be touched for shared layout or styling concerns.'
+        : '- Existing routes may be modified if required, but preserve the final route shape and registration contract.',
+    requirements.canonical_frontend_url && !requirements.allow_temporary_frontend_urls
+      ? `- Register only against the canonical frontend URL ${requirements.canonical_frontend_url}.`
+      : '- Confirm the final production frontend URL before registration whenever possible.',
+    '',
+  );
+
+  lines.push(
+    '--- DATA SOURCE ---',
+    '',
+    'Use the schema-scoped published pages API instead of inferring schema membership from raw table reads whenever possible.',
+    `GET ${pagesUrl}`,
+    'Returns only these fields for published pages:',
+    '  - id',
+    '  - slug',
+    '  - name',
+    '  - status',
+    '  - content',
+    '  - domain_url',
+    '  - updated_at',
+    '',
+  );
+
+  lines.push(
+    '--- SCHEMA DEFINITION ---',
+    '',
+    JSON.stringify(schema.schema, null, 2),
+    '',
+  );
+
+  lines.push(
+    '--- CONTENT BLOCK TYPES ---',
+    '',
+    'ContentBlock is a union type. Each block has { id: string, type: string } plus type-specific fields:',
+    '',
+    '  text:    { content: string }',
+    '  heading: { content: string, level: "heading1" | "heading2" | "heading3" | "heading4" | "heading5" | "heading6" }',
+    '  image:   { src: string, alt: string, caption?: string, width?: number, height?: number }',
+    '  quote:   { text: string, author?: string, source?: string }',
+    '  list:    { style: "ordered" | "unordered", items: string[] }',
+    '  video:   { src: string, provider: "youtube" | "vimeo" | "other", caption?: string }',
+    '',
+    'Block IDs follow the pattern: ${prefix}-${timestamp}-${random}',
+    '',
+  );
+
+  lines.push(
+    '--- REVALIDATION ---',
+    '',
+    '- The CMS derives the full route path from slug_structure and the stored page slug.',
+    '- Your revalidation endpoint should accept Authorization: Bearer <secret>.',
+    '- The CMS sends ?path=<full-route-path> and ?slug=<bare-page-slug>.',
+    '- Use the full path as the primary invalidation target.',
+    '',
+  );
+
+  if (schema.llm_instructions) {
+    lines.push('--- LLM INSTRUCTIONS ---', '', schema.llm_instructions, '');
+  }
+
+  if (schema.frontend_url) {
+    lines.push(
+      '--- FRONTEND INFO ---',
+      '',
+      `Frontend URL: ${schema.frontend_url}`,
+      `Slug Structure: ${schema.slug_structure}`,
+      `Revalidation Endpoint: ${schema.revalidation_endpoint || 'Not configured'}`,
+      '',
+    );
+  }
+
+  if (schema.registration_status === 'waiting' && schema.registration_code) {
+    lines.push(
+      '--- REGISTRATION ---',
+      '',
+      `Registration Code: ${schema.registration_code}`,
+      '',
+      'Register only after the frontend is reachable and verified.',
+      `POST ${baseUrl}/api/schemas/${schema.slug}/register`,
+      '',
+      'Request body (JSON):',
+      JSON.stringify({
+        code: schema.registration_code,
+        frontend_url: requirements.canonical_frontend_url || 'https://your-frontend.com',
+        revalidation_endpoint: '/api/revalidate',
+        revalidation_secret: 'your-shared-secret',
+        slug_structure: expectedSlugStructure,
+      }, null, 2),
+      '',
+    );
+  }
+
+  lines.push('='.repeat(60));
+  return lines;
 }
 
 interface SchemaSecretStatusResult {
@@ -248,7 +447,7 @@ async function completeSchemaRegistration(env: Env, slug: string, body: SchemaRe
 
   const { data: schema, error } = await supabase
     .from('page_schemas')
-    .select('id, slug, registration_code, registration_status, revalidation_secret_name')
+    .select('id, slug, registration_code, registration_status, revalidation_secret_name, slug_structure, integration_requirements')
     .eq('slug', slug)
     .single();
 
@@ -264,6 +463,28 @@ async function completeSchemaRegistration(env: Env, slug: string, body: SchemaRe
     return { status: 403 as const, body: { error: 'Invalid registration code' } };
   }
 
+  const validatedFrontendUrl = validateOutboundHttpUrl(body.frontend_url);
+  if (!validatedFrontendUrl.ok) {
+    return { status: 400 as const, body: { error: validatedFrontendUrl.error } };
+  }
+
+  const frontendPolicy = isFrontendUrlAllowed(validatedFrontendUrl.url.origin, schema.integration_requirements);
+  if (!frontendPolicy.ok) {
+    return { status: 400 as const, body: { error: frontendPolicy.error } };
+  }
+
+  const normalizedRequirements = normalizeSchemaIntegrationRequirements(schema.integration_requirements);
+  const slugStructureCandidate = body.slug_structure?.trim()
+    || normalizedRequirements.required_slug_structure
+    || schema.slug_structure
+    || '/:slug';
+  const slugStructureValidation = validateSlugStructure(slugStructureCandidate, schema.integration_requirements);
+  if (!slugStructureValidation.ok) {
+    return { status: 400 as const, body: { error: slugStructureValidation.error } };
+  }
+
+  const revalidationEndpoint = normalizeRevalidationEndpoint(body.revalidation_endpoint);
+
   const revalidationSecretName = body.revalidation_secret?.trim()
     ? (schema.revalidation_secret_name || buildRevalidationSecretName(schema.id))
     : schema.revalidation_secret_name;
@@ -276,7 +497,7 @@ async function completeSchemaRegistration(env: Env, slug: string, body: SchemaRe
       metadata: {
         schema_id: schema.id,
         schema_slug: schema.slug,
-        frontend_url: body.frontend_url,
+        frontend_url: validatedFrontendUrl.url.origin,
       },
     });
   }
@@ -286,11 +507,11 @@ async function completeSchemaRegistration(env: Env, slug: string, body: SchemaRe
     .update({
       registration_status: 'registered',
       registration_code: null,
-      frontend_url: body.frontend_url,
-      revalidation_endpoint: body.revalidation_endpoint || null,
+      frontend_url: validatedFrontendUrl.url.origin,
+      revalidation_endpoint: revalidationEndpoint,
       revalidation_secret: null,
       revalidation_secret_name: revalidationSecretName ?? null,
-      slug_structure: body.slug_structure || '/:slug',
+      slug_structure: slugStructureValidation.normalized,
     })
     .eq('id', schema.id);
 
@@ -305,8 +526,8 @@ async function completeSchemaRegistration(env: Env, slug: string, body: SchemaRe
       message: 'Schema registration completed successfully',
       schema: {
         slug,
-        frontend_url: body.frontend_url,
-        slug_structure: body.slug_structure || '/:slug',
+        frontend_url: validatedFrontendUrl.url.origin,
+        slug_structure: slugStructureValidation.normalized,
       },
     },
   };
@@ -375,7 +596,7 @@ schemas.get('/', async (c) => {
 
   const { data, error } = await supabase
     .from('page_schemas')
-    .select('slug, name, description, registration_status, is_default, frontend_url, created_at, updated_at')
+    .select('slug, name, description, registration_status, is_default, frontend_url, slug_structure, integration_requirements, created_at, updated_at')
     .order('is_default', { ascending: false })
     .order('name', { ascending: true });
 
@@ -396,7 +617,11 @@ schemas.get('/', async (c) => {
       status: s.registration_status,
       is_default: s.is_default,
       frontend_url: s.frontend_url,
+      slug_structure: s.slug_structure,
+      integration_requirements: normalizeSchemaIntegrationRequirements(s.integration_requirements),
       spec_url: `${baseUrl}/api/schemas/${s.slug}/spec.txt`,
+      spec_json_url: `${baseUrl}/api/schemas/${s.slug}/spec`,
+      pages_url: `${baseUrl}/api/schemas/${s.slug}/pages`,
       register_url: `${baseUrl}/api/schemas/${s.slug}/register`,
       created_at: s.created_at,
       updated_at: s.updated_at,
@@ -518,49 +743,7 @@ schemas.get('/:slug/spec.txt', async (c) => {
     .select('*', { count: 'exact', head: true })
     .eq('schema_id', schema.id);
 
-  const lines: string[] = [
-    '='.repeat(60),
-    `SCHEMA SPECIFICATION: ${schema.name}`,
-    '='.repeat(60),
-    '',
-    `Name: ${schema.name}`,
-    `Slug: ${schema.slug}`,
-    `Status: ${schema.registration_status}`,
-    `Default: ${schema.is_default ? 'Yes' : 'No'}`,
-    `Pages using this schema: ${count ?? 0}`,
-    `Created: ${schema.created_at}`,
-    `Updated: ${schema.updated_at}`,
-    '',
-  ];
-
-  if (schema.description) {
-    lines.push('--- DESCRIPTION ---', schema.description, '');
-  }
-
-  lines.push(
-    '--- SCHEMA DEFINITION ---',
-    '',
-    JSON.stringify(schema.schema, null, 2),
-    '',
-  );
-
-  // Content Block reference
-  lines.push(
-    '--- CONTENT BLOCK TYPES ---',
-    '',
-    'ContentBlock is a union type. Each block has { id: string, type: string } plus type-specific fields:',
-    '',
-    '  text:    { content: string }',
-    '  heading: { content: string, level: "heading1" | "heading2" | "heading3" | "heading4" | "heading5" | "heading6" }',
-    '  image:   { src: string, alt: string, caption?: string, width?: number, height?: number }',
-    '  quote:   { text: string, author?: string, source?: string }',
-    '  list:    { style: "ordered" | "unordered", items: string[] }',
-    '  video:   { src: string, provider: "youtube" | "vimeo" | "other", caption?: string }',
-    '',
-    'Block IDs follow the pattern: ${prefix}-${timestamp}-${random}',
-    '',
-  );
-
+  const lines = buildSpecSections(schema, count ?? 0, new URL(c.req.url).origin);
   lines.push(
     '--- CODE BLOCK FIELD TYPE ---',
     '',
@@ -571,47 +754,77 @@ schemas.get('/:slug/spec.txt', async (c) => {
     'The optional items.properties definition can be used to configure placeholders, help text, required flags, and enum options for language, pattern, frameworks, or extra metadata fields.',
     'If frameworks.items.enum is provided, the Page Builder renders a multi-select checkbox group for frameworks.',
     '',
+    '='.repeat(60),
   );
 
-  if (schema.llm_instructions) {
-    lines.push('--- LLM INSTRUCTIONS ---', '', schema.llm_instructions, '');
+  return c.text(lines.join('\n'), 200, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'X-Spec-Format': 'raw-text',
+  });
+});
+
+schemas.get('/:slug/spec', async (c) => {
+  const slug = c.req.param('slug');
+  const supabase = await createSupabaseClient(c.env);
+
+  const { data: schema, error } = await supabase
+    .from('page_schemas')
+    .select('*')
+    .eq('slug', slug)
+    .single();
+
+  if (error || !schema) {
+    return c.json({ error: `Schema "${slug}" not found` }, 404);
   }
 
-  if (schema.frontend_url) {
-    lines.push(
-      '--- FRONTEND INFO ---',
-      '',
-      `Frontend URL: ${schema.frontend_url}`,
-      `Slug Structure: ${schema.slug_structure}`,
-      `Revalidation Endpoint: ${schema.revalidation_endpoint || 'Not configured'}`,
-      '',
-    );
+  const { count } = await supabase
+    .from('pages')
+    .select('*', { count: 'exact', head: true })
+    .eq('schema_id', schema.id);
+
+  return c.json({
+    schema,
+    page_count: count ?? 0,
+    integration_requirements: normalizeSchemaIntegrationRequirements(schema.integration_requirements),
+    spec_text_url: `${new URL(c.req.url).origin}/api/schemas/${slug}/spec.txt`,
+    pages_url: `${new URL(c.req.url).origin}/api/schemas/${slug}/pages`,
+  });
+});
+
+schemas.get('/:slug/pages', async (c) => {
+  const slug = c.req.param('slug');
+  const supabase = await createSupabaseClient(c.env);
+
+  const { data: schema, error: schemaError } = await supabase
+    .from('page_schemas')
+    .select('id, slug, name, slug_structure, integration_requirements')
+    .eq('slug', slug)
+    .single();
+
+  if (schemaError || !schema) {
+    return c.json({ error: `Schema "${slug}" not found` }, 404);
   }
 
-  if (schema.registration_status === 'waiting' && schema.registration_code) {
-    lines.push(
-      '--- REGISTRATION ---',
-      '',
-      `Registration Code: ${schema.registration_code}`,
-      '',
-      'To complete schema registration, POST to:',
-      `POST /api/schemas/${slug}/register`,
-      '',
-      'Request body (JSON):',
-      JSON.stringify({
-        code: schema.registration_code,
-        frontend_url: 'https://your-frontend.com',
-        revalidation_endpoint: '/api/revalidate',
-        revalidation_secret: 'your-shared-secret',
-        slug_structure: '/:slug',
-      }, null, 2),
-      '',
-    );
+  const { data, error } = await supabase
+    .from('pages')
+    .select('id, slug, name, status, content, domain_url, updated_at')
+    .eq('schema_id', schema.id)
+    .eq('status', 'published')
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    return c.json({ error: error.message }, 500);
   }
 
-  lines.push('='.repeat(60));
-
-  return c.text(lines.join('\n'), 200);
+  return c.json({
+    schema: {
+      slug: schema.slug,
+      name: schema.name,
+      slug_structure: schema.slug_structure,
+      integration_requirements: normalizeSchemaIntegrationRequirements(schema.integration_requirements),
+    },
+    pages: (data ?? []) as PublishedSchemaPageRow[],
+  });
 });
 
 // POST /api/schemas/:slug/register — Frontend registration callback
@@ -849,7 +1062,7 @@ schemas.post('/:slug/revalidate', async (c) => {
 
   const { data: schema, error } = await supabase
     .from('page_schemas')
-    .select('id, frontend_url, revalidation_endpoint, revalidation_secret, revalidation_secret_name, registration_status')
+    .select('id, frontend_url, revalidation_endpoint, revalidation_secret, revalidation_secret_name, registration_status, slug_structure, integration_requirements')
     .eq('slug', slug)
     .single();
 
@@ -883,9 +1096,12 @@ schemas.post('/:slug/revalidate', async (c) => {
     return c.json({ error: 'Frontend revalidation not configured' }, 400);
   }
 
+  const routePath = buildSchemaPagePath(resolvedSchema.slug_structure || '/:slug', body.page_slug);
+
   // Build revalidation URL
   const revalidateUrl = new URL(resolvedSchema.revalidation_endpoint, resolvedSchema.frontend_url);
-  revalidateUrl.searchParams.set('path', body.page_slug);
+  revalidateUrl.searchParams.set('path', routePath);
+  revalidateUrl.searchParams.set('slug', body.page_slug);
 
   let secretValue: string | null = null;
   if (resolvedSchema.revalidation_secret_name) {
@@ -941,6 +1157,8 @@ schemas.post('/:slug/revalidate', async (c) => {
     return c.json({
       success: response.ok,
       status: response.status,
+      path: routePath,
+      slug: body.page_slug,
       message: response.ok
         ? 'Revalidation triggered successfully'
         : `Revalidation request failed${upstreamMessage ? `: ${upstreamMessage}` : ''}`,

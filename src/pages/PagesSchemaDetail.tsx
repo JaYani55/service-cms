@@ -44,6 +44,7 @@ import type { PageSchema, PageRecord } from '@/types/pagebuilder';
 import { useTheme } from '@/contexts/ThemeContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { toast } from 'sonner';
+import { buildSchemaPageUrl, getExpectedSlugStructure, normalizeSchemaIntegrationRequirements } from '@/utils/schemaRouting';
 
 const statusBadgeVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   draft: 'secondary',
@@ -217,6 +218,8 @@ const PagesSchemaDetail: React.FC = () => {
     );
   }
 
+  const integrationRequirements = normalizeSchemaIntegrationRequirements(schema.integration_requirements);
+
   // Show waiting screen if schema is in waiting status
   if (schema.registration_status === 'waiting') {
     return (
@@ -315,7 +318,7 @@ const PagesSchemaDetail: React.FC = () => {
               <Separator orientation="vertical" className="h-4" />
               <div>
                 <span className="font-medium">{language === 'en' ? 'Slug Pattern' : 'Slug-Muster'}:</span>{' '}
-                <code className="bg-muted px-1 rounded text-xs">{schema.slug_structure}</code>
+                <code className="bg-muted px-1 rounded text-xs">{getExpectedSlugStructure(schema)}</code>
               </div>
               {schema.revalidation_endpoint && (
                 <>
@@ -413,6 +416,55 @@ const PagesSchemaDetail: React.FC = () => {
         </Card>
       )}
 
+      <Card>
+        <CardHeader>
+          <CardTitle>{language === 'en' ? 'Frontend Contract' : 'Frontend-Vertrag'}</CardTitle>
+          <CardDescription>
+            {language === 'en'
+              ? 'These constraints are shown to frontend builders and enforced during registration.'
+              : 'Diese Vorgaben werden Frontend-Builders angezeigt und während der Registrierung erzwungen.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2 text-sm">
+          <div>
+            <span className="font-medium">{language === 'en' ? 'Canonical URL' : 'Kanonische URL'}:</span>{' '}
+            <span className="text-muted-foreground">{integrationRequirements.canonical_frontend_url || 'Not fixed'}</span>
+          </div>
+          <div>
+            <span className="font-medium">{language === 'en' ? 'Route base path' : 'Routen-Basispfad'}:</span>{' '}
+            <span className="text-muted-foreground">{integrationRequirements.route_base_path || '/'}</span>
+          </div>
+          <div>
+            <span className="font-medium">{language === 'en' ? 'Required route shape' : 'Erforderliche Routenform'}:</span>{' '}
+            <span className="text-muted-foreground">{integrationRequirements.required_slug_structure || getExpectedSlugStructure(schema)}</span>
+          </div>
+          <div>
+            <span className="font-medium">{language === 'en' ? 'Route ownership' : 'Routen-Verantwortung'}:</span>{' '}
+            <span className="text-muted-foreground">{integrationRequirements.route_ownership}</span>
+          </div>
+          <div>
+            <span className="font-medium">{language === 'en' ? 'Temporary domains' : 'Temporäre Domains'}:</span>{' '}
+            <span className="text-muted-foreground">{integrationRequirements.allow_temporary_frontend_urls ? 'Allowed' : 'Blocked'}</span>
+          </div>
+          <div>
+            <span className="font-medium">{language === 'en' ? 'Page discovery' : 'Seitenermittlung'}:</span>{' '}
+            <span className="text-muted-foreground">{integrationRequirements.page_discovery_mode}</span>
+          </div>
+          {integrationRequirements.schema_identification_hint && (
+            <div className="md:col-span-2">
+              <span className="font-medium">{language === 'en' ? 'Schema hint' : 'Schema-Hinweis'}:</span>{' '}
+              <span className="text-muted-foreground">{integrationRequirements.schema_identification_hint}</span>
+            </div>
+          )}
+          {integrationRequirements.registration_notes && (
+            <div className="md:col-span-2">
+              <span className="font-medium">{language === 'en' ? 'Registration notes' : 'Registrierungsnotizen'}:</span>{' '}
+              <span className="text-muted-foreground">{integrationRequirements.registration_notes}</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Pages List */}
       <div>
         <h2 className="text-xl font-semibold mb-4">
@@ -476,7 +528,7 @@ const PagesSchemaDetail: React.FC = () => {
                             asChild
                           >
                             <a
-                              href={`${schema.frontend_url}${schema.slug_structure.replace(':slug', page.slug)}`}
+                              href={buildSchemaPageUrl(schema.frontend_url, getExpectedSlugStructure(schema), page.slug)}
                               target="_blank"
                               rel="noopener noreferrer"
                             >

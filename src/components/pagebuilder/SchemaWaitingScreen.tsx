@@ -10,6 +10,7 @@ import type { PageSchema } from '@/types/pagebuilder';
 import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
 import { API_URL } from '@/lib/apiUrl';
+import { getExpectedSlugStructure, normalizeSchemaIntegrationRequirements } from '@/utils/schemaRouting';
 
 interface SchemaWaitingScreenProps {
   schema: PageSchema;
@@ -25,7 +26,11 @@ export const SchemaWaitingScreen: React.FC<SchemaWaitingScreenProps> = ({ schema
   const [selectedFramework, setSelectedFramework] = useState<'nextjs' | 'sveltekit'>('nextjs');
 
   const specUrl = `${API_URL}/api/schemas/${schema.slug}/spec.txt`;
+  const specJsonUrl = `${API_URL}/api/schemas/${schema.slug}/spec`;
+  const pagesUrl = `${API_URL}/api/schemas/${schema.slug}/pages`;
   const registerUrl = `${API_URL}/api/schemas/${schema.slug}/register`;
+  const integrationRequirements = normalizeSchemaIntegrationRequirements(schema.integration_requirements);
+  const expectedSlugStructure = getExpectedSlugStructure(schema);
 
   // Poll for registration status changes
   useEffect(() => {
@@ -65,21 +70,25 @@ export const SchemaWaitingScreen: React.FC<SchemaWaitingScreenProps> = ({ schema
 
   Schema slug: ${schema.slug}
   Specification URL: ${specUrl}
+  Machine-readable spec URL: ${specJsonUrl}
+  Published pages API: ${pagesUrl}
   Registration URL: ${registerUrl}
   Registration code: ${schema.registration_code}
 
+  Non-negotiable constraints:
+  - Public route shape must be ${expectedSlugStructure}
+  - Route ownership policy: ${integrationRequirements.route_ownership}
+  - Page discovery mode: ${integrationRequirements.page_discovery_mode}
+  - Canonical frontend URL: ${integrationRequirements.canonical_frontend_url || 'Not fixed by schema'}
+  - Temporary domains allowed: ${integrationRequirements.allow_temporary_frontend_urls ? 'yes' : 'no'}
+
   1. Fetch the full schema specification first:
     GET ${specUrl}
+    Also fetch the machine-readable spec if you need to script against it:
+    GET ${specJsonUrl}
 
-  2. Build a frontend that reads published pages for this schema from Supabase table "pages".
-    Required page fields:
-    - id
-    - slug
-    - name
-    - status
-    - content
-    - domain_url
-    - updated_at
+  2. Read published pages from the schema-scoped pages endpoint unless explicitly instructed otherwise:
+    GET ${pagesUrl}
 
   3. Support ContentBlock arrays as defined in the spec.
     ContentBlock types:
@@ -94,18 +103,18 @@ export const SchemaWaitingScreen: React.FC<SchemaWaitingScreenProps> = ({ schema
      if (isNext) {
       prompt += `
   4. Implement ISR in Next.js App Router.
-    - Use app/[slug]/page.tsx or the matching route for your slug_structure.
+      - Use the route structure that matches ${expectedSlugStructure}.
     - Expose POST /api/revalidate?path=<page_slug>
     - Read Authorization: Bearer <secret> for authentication
-    - Revalidate the full route path derived from slug_structure.
+      - Revalidate the full route path from the incoming path query parameter.
   `;
      } else {
       prompt += `
   4. Implement revalidation / cache invalidation in SvelteKit.
-    - Use src/routes/[slug]/+page.server.ts or the matching route for your slug_structure.
+      - Use the route structure that matches ${expectedSlugStructure}.
     - Expose POST /api/revalidate/<page_slug> or POST /api/revalidate?path=<page_slug>.
     - Read Authorization: Bearer <secret> for authentication.
-    - Invalidate the full route path derived from slug_structure.
+      - Invalidate the full route path from the incoming path query parameter.
   `;
      }
 
@@ -116,19 +125,27 @@ export const SchemaWaitingScreen: React.FC<SchemaWaitingScreenProps> = ({ schema
 
     {
       "code": "${schema.registration_code}",
-      "frontend_url": "https://your-site.com",
+      "frontend_url": "${integrationRequirements.canonical_frontend_url || 'https://your-site.com'}",
       "revalidation_endpoint": "/api/revalidate",
       "revalidation_secret": "your-secret",
-      "slug_structure": "/:slug"
+      "slug_structure": "${expectedSlugStructure}"
     }
 
-  6. Use the slug_structure that matches the real route shape.
-    Examples:
-    - /:slug
-    - /blog/:slug
-    - /products/:slug
+  6. Treat examples as illustrative only. The registered slug_structure must match the actual deployed route shape above.
 
-  7. Health checks expect the deployed domain to respond successfully.
+  7. Do not register the frontend until the final deployed domain is healthy.
+    ${integrationRequirements.allow_temporary_frontend_urls
+      ? '- Temporary preview domains are allowed by this schema, but production is still preferred.'
+      : `- Temporary preview domains are not allowed. Register only ${integrationRequirements.canonical_frontend_url || 'the canonical production URL'}.`}
+
+  8. Existing route policy:
+    ${integrationRequirements.route_ownership === 'isolated'
+      ? '- Keep the new frontend isolated to the configured route segment. Do not replace unrelated dynamic routes.'
+      : integrationRequirements.route_ownership === 'shared-layout-only'
+        ? '- Existing routes may only be touched for shared layout or styling concerns.'
+        : '- Existing routes may be modified if necessary, but preserve the final public route shape.'}
+
+  9. Health checks expect the deployed domain to respond successfully.
   `;
 
      return prompt;
@@ -270,6 +287,23 @@ export const SchemaWaitingScreen: React.FC<SchemaWaitingScreenProps> = ({ schema
                   ? 'Share this URL with your AI agent or developer. It contains the full schema definition, instructions, and registration payload details.'
                   : 'Teile diese URL mit deinem KI-Agenten oder Entwickler. Sie enthält die vollständige Schema-Definition, Anweisungen und Details zum Registrierungspayload.'}
               </p>
+            </div>
+          </div>
+
+          <div className="bg-white/60 dark:bg-black/20 rounded-xl p-5 border border-amber-200/80 dark:border-amber-700/40 space-y-3">
+            <h3 className="font-semibold text-amber-900 dark:text-amber-200 text-sm flex items-center gap-2">
+              <Info className="h-4 w-4" />
+              {language === 'en' ? 'Schema Contract' : 'Schema-Vertrag'}
+            </h3>
+            <div className="grid gap-2 text-sm text-amber-900 dark:text-amber-200">
+              <p><strong>{language === 'en' ? 'Route shape:' : 'Routenform:'}</strong> {expectedSlugStructure}</p>
+              <p><strong>{language === 'en' ? 'Route ownership:' : 'Routen-Verantwortung:'}</strong> {integrationRequirements.route_ownership}</p>
+              <p><strong>{language === 'en' ? 'Canonical domain:' : 'Kanonische Domain:'}</strong> {integrationRequirements.canonical_frontend_url || 'Not fixed'}</p>
+              <p><strong>{language === 'en' ? 'Temporary domains:' : 'Temporäre Domains:'}</strong> {integrationRequirements.allow_temporary_frontend_urls ? 'Allowed' : 'Blocked'}</p>
+              <p><strong>{language === 'en' ? 'Page discovery:' : 'Seitenermittlung:'}</strong> {integrationRequirements.page_discovery_mode}</p>
+              {integrationRequirements.registration_notes && (
+                <p><strong>{language === 'en' ? 'Registration notes:' : 'Registrierungsnotizen:'}</strong> {integrationRequirements.registration_notes}</p>
+              )}
             </div>
           </div>
 

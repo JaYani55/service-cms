@@ -255,20 +255,20 @@ Once deployed, call the CMS registration endpoint from your frontend
     "frontend_url": "https://your-site.com",
     "revalidation_endpoint": "/api/revalidate",
     "revalidation_secret": "<shared_secret>", // stored by the CMS, not persisted in plaintext
-    "slug_structure": "/:slug"               // URL pattern — see section 4.5
+    "slug_structure": "/docs/:slug"          // must match the real deployed route
   }
 
 Success response (200):
   {
     "success": true,
     "message": "Schema registration completed successfully",
-    "schema": { "slug": "...", "frontend_url": "...", "slug_structure": "/:slug" }
+    "schema": { "slug": "...", "frontend_url": "...", "slug_structure": "/docs/:slug" }
   }
 
 After registration the CMS will:
   • Set schema status → "registered"
   • Show the domain in the Pages dashboard with a health ping
-  • Call POST {frontend_url}{revalidation_endpoint}?path={page_slug}
+  • Call POST {frontend_url}{revalidation_endpoint}?path={full_route_path}&slug={page_slug}
     with Authorization: Bearer {shared_secret}
     whenever content for this schema is published or updated`;
 
@@ -297,6 +297,8 @@ Examples:
 3. The CMS Page Builder will then show a live "Vorschau ansehen" button
    after saving, pointing to: {frontend_url}{slug_structure with :slug replaced}
 
+If the schema defines a fixed route segment like "/docs", keep the frontend isolated there and do not repurpose unrelated dynamic routes.
+
 ── Preview slug for draft pages ──
 The CMS saves pages as "draft" by default. To preview before publishing:
 ${isNext ? `  • Add a ?draft=true query param and check it in your page component
@@ -307,13 +309,11 @@ ${isNext ? `  • Add a ?draft=true query param and check it in your page compon
 
 ── Revalidation path format ──
 The CMS calls your revalidation endpoint with:
-  POST {revalidation_endpoint}?path={page_slug}
+  POST {revalidation_endpoint}?path={full_route_path}&slug={page_slug}
   Authorization: Bearer {secret}
 
-Here "path" is the bare slug (e.g. "my-page"), NOT the full URL path.
-Your revalidation handler should prepend the route prefix if needed:
-  // e.g. for "/blog/:slug", revalidate "/blog/my-page"
-  const fullPath = \`/blog/\${path}\`;`;
+Here "path" is the full derived route path (e.g. "/blog/my-page").
+The optional "slug" query parameter still carries the bare page slug for compatibility.`;
 
     // ── Section: health ───────────────────────────────────────────────────
     prompt += `

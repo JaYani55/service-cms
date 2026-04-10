@@ -146,14 +146,14 @@ export const API_CATALOG: ApiEndpointDefinition[] = [
       { name: 'frontend_url', in: 'body', required: true, type: 'string', description: 'Base URL of the consuming frontend.' },
       { name: 'revalidation_endpoint', in: 'body', required: false, type: 'string', description: 'Relative revalidation endpoint path.' },
       { name: 'revalidation_secret', in: 'body', required: false, type: 'string', description: 'Shared secret for outbound ISR calls. Stored server-side; not persisted in plaintext on page_schemas.' },
-      { name: 'slug_structure', in: 'body', required: false, type: 'string', description: 'Frontend URL pattern, defaults to /:slug.' },
+      { name: 'slug_structure', in: 'body', required: false, type: 'string', description: 'Frontend URL pattern. Must include :slug and match any schema-level route constraints.' },
     ],
     requestExample: `{
   "code": "3f6f7a31-...",
   "frontend_url": "https://frontend.example.com",
   "revalidation_endpoint": "/api/revalidate",
   "revalidation_secret": "shared-secret",
-  "slug_structure": "/:slug"
+  "slug_structure": "/docs/:slug"
 }`,
     responseExamples: [
       {
@@ -181,7 +181,7 @@ export const API_CATALOG: ApiEndpointDefinition[] = [
     method: 'POST',
     path: '/api/schemas/:slug/revalidate',
     summary: 'Trigger frontend revalidation for one page slug',
-    description: 'Builds the target revalidation URL from stored schema frontend settings and forwards a POST request to the registered frontend.',
+    description: 'Builds the canonical page path from the stored schema slug_structure and forwards a POST request to the registered frontend.',
     auth: 'public',
     mountsAt: '/api/schemas',
     sourceFile: 'api/routes/schemas.ts',

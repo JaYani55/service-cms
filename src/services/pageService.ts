@@ -1,5 +1,13 @@
 import { supabase } from '@/lib/supabase';
-import type { PageSchema, PageSchemaTemplate, PageRecord, PageBuilderData, TLDGroup } from '@/types/pagebuilder';
+import {
+  DEFAULT_SCHEMA_INTEGRATION_REQUIREMENTS,
+  type PageSchema,
+  type PageSchemaTemplate,
+  type PageRecord,
+  type PageBuilderData,
+  type TLDGroup,
+  type SchemaIntegrationRequirements,
+} from '@/types/pagebuilder';
 
 import { API_URL } from '@/lib/apiUrl';
 
@@ -25,6 +33,13 @@ export interface CreateSchemaTemplateInput {
   source_schema_id?: string;
   external_source_url?: string;
 }
+
+const normalizeIntegrationRequirements = (
+  requirements?: Partial<SchemaIntegrationRequirements> | null,
+): SchemaIntegrationRequirements => ({
+  ...DEFAULT_SCHEMA_INTEGRATION_REQUIREMENTS,
+  ...(requirements ?? {}),
+});
 
 async function createAuthenticatedHeaders(extraHeaders?: HeadersInit): Promise<Headers> {
   const headers = new Headers(extraHeaders);
@@ -209,6 +224,7 @@ export const createSchema = async (input: {
   description?: string;
   schema: Record<string, unknown>;
   llm_instructions?: string;
+  integration_requirements?: Partial<SchemaIntegrationRequirements> | null;
 }): Promise<PageSchema> => {
   const slug = generateSlug(input.name);
   const registrationCode = generateRegistrationCode();
@@ -221,6 +237,7 @@ export const createSchema = async (input: {
       description: input.description || null,
       schema: input.schema,
       llm_instructions: input.llm_instructions || null,
+      integration_requirements: normalizeIntegrationRequirements(input.integration_requirements),
       registration_code: registrationCode,
       registration_status: 'waiting',
     })
@@ -238,11 +255,15 @@ export const updateSchema = async (
     description: string;
     schema: Record<string, unknown>;
     llm_instructions: string;
+    integration_requirements: Partial<SchemaIntegrationRequirements> | null;
   }>
 ): Promise<PageSchema> => {
   const updateData: Record<string, unknown> = { ...input };
   if (input.name) {
     updateData.slug = generateSlug(input.name);
+  }
+  if (Object.prototype.hasOwnProperty.call(input, 'integration_requirements')) {
+    updateData.integration_requirements = normalizeIntegrationRequirements(input.integration_requirements);
   }
 
   const { data, error } = await supabase
