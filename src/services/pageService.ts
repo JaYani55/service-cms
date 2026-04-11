@@ -245,6 +245,25 @@ export const createSchema = async (input: {
     .single();
 
   if (error) throw new Error(error.message);
+
+  if (API_URL) {
+    try {
+      const bootstrapResponse = await fetch(`${API_URL}/api/specs/bootstrap/schema/${data.id}`, {
+        method: 'POST',
+        headers: await createAuthenticatedHeaders({
+          'Accept': 'application/json',
+        }),
+      });
+
+      if (!bootstrapResponse.ok) {
+        const body = await bootstrapResponse.json().catch(() => ({ error: 'Failed to bootstrap main spec' })) as { error?: string };
+        console.warn('[pageService] Schema created without bootstrapped main spec:', body.error ?? 'Failed to bootstrap main spec');
+      }
+    } catch (bootstrapError) {
+      console.warn('[pageService] Schema created but spec bootstrap request failed:', bootstrapError);
+    }
+  }
+
   return data as PageSchema;
 };
 

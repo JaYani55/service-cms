@@ -15,6 +15,7 @@ import {
   normalizeSchemaIntegrationRequirements,
   validateSlugStructure,
 } from '../lib/schemaRouting';
+import { getDiscoverableSpecBySlug, listDiscoverableSpecs } from '../lib/specRegistry';
 
 const mcpRoute = new Hono<{ Bindings: Env }>();
 
@@ -42,6 +43,52 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
   const supabase = await createSupabaseClient(env);
 
   // ── Tool: list_schemas ──────────────────────────────────────────────────
+  server.tool(
+    'list_available_tools',
+    'List all published public specs attached to registered schemas. This is the unified discovery surface for agent-readable tools.',
+    {},
+    async () => {
+      const specs = await listDiscoverableSpecs(env);
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            specs: specs.map((spec) => ({
+              slug: spec.slug,
+              name: spec.name,
+              description: spec.description,
+              schema: spec.schema,
+              is_main: spec.is_main,
+              detail_url: `${baseUrl}/api/specs/${spec.slug}`,
+            })),
+            total: specs.length,
+          }, null, 2),
+        }],
+      };
+    },
+  );
+
+  server.tool(
+    'get_spec_definition',
+    'Get the full JSON definition for a discoverable spec by slug.',
+    { slug: z.string().describe('The spec slug to resolve') },
+    async ({ slug }) => {
+      const spec = await getDiscoverableSpecBySlug(env, slug);
+
+      if (!spec) {
+        return { content: [{ type: 'text' as const, text: `Spec "${slug}" not found.` }] };
+      }
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ spec }, null, 2),
+        }],
+      };
+    },
+  );
+
   server.tool(
     'list_schemas',
     'List all available page schemas in the CMS. Returns slug, name, description, status, and URLs for each schema.',
@@ -227,7 +274,7 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
         : schema.revalidation_secret_name;
 
       if (revalidation_secret?.trim() && secretName) {
-        await upsertManagedSecret(c.env, {
+        await upsertManagedSecret(env, {
           name: secretName,
           namespace: getRevalidationSecretNamespace(),
           value: revalidation_secret.trim(),
@@ -239,7 +286,7 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
         });
       }
 
-      const admin = await createSupabaseAdminClient(c.env);
+      const admin = await createSupabaseAdminClient(env);
       const { error: updateError } = await admin
         .from('page_schemas')
         .update({
@@ -337,7 +384,7 @@ mcpRoute.all('/', async (c) => {
       transport: 'Streamable HTTP (SSE)',
       status: 'active',
       description: 'This is an MCP endpoint. Connect using an MCP-compatible client (like Claude Desktop or another AI agent) to use the available tools.',
-      tools: ['list_schemas', 'get_schema_spec', 'register_frontend', 'check_health']
+      tools: ['list_available_tools', 'get_spec_definition', 'list_schemas', 'get_schema_spec', 'register_frontend', 'check_health']
     });
   }
 

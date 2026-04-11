@@ -19,6 +19,7 @@ import {
   getSchema,
   startSchemaRegistration,
 } from '@/services/pageService';
+import { getSchemaSpecBundle, getSpecs, updateSchemaSpecAttachments } from '@/services/specService';
 import {
   DEFAULT_SCHEMA_INTEGRATION_REQUIREMENTS,
   type SchemaFieldDefinition,
@@ -27,6 +28,7 @@ import {
   type SchemaTemplateDefinition,
   type SchemaIntegrationRequirements,
 } from '@/types/pagebuilder';
+import type { SchemaSpecBundle, SpecRecord } from '@/types/specs';
 import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
 import { SCHEMA_TEMPLATES, type SchemaTemplate } from '@/config/schemaTemplates';
@@ -634,6 +636,12 @@ const SchemaEditor: React.FC = () => {
   const [schemaJsonResult, setSchemaJsonResult] = useState<SchemaJsonParseResult | null>(null);
   const [availableTemplates, setAvailableTemplates] = useState<SchemaTemplateDefinition[]>(SCHEMA_TEMPLATES);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [availableSpecs, setAvailableSpecs] = useState<SpecRecord[]>([]);
+  const [schemaSpecBundle, setSchemaSpecBundle] = useState<SchemaSpecBundle | null>(null);
+  const [selectedMainSpecId, setSelectedMainSpecId] = useState<string>('');
+  const [selectedAdditionalSpecIds, setSelectedAdditionalSpecIds] = useState<string[]>([]);
+  const [isLoadingSpecs, setIsLoadingSpecs] = useState(false);
+  const [isSavingSpecAssignments, setIsSavingSpecAssignments] = useState(false);
 
   useEffect(() => {
     if (isEditing && schemaSlug) {
@@ -660,6 +668,33 @@ const SchemaEditor: React.FC = () => {
       .then((templates) => setAvailableTemplates(mergeTemplates(SCHEMA_TEMPLATES, templates.map(toStoredTemplateDefinition))))
       .catch(() => setAvailableTemplates(SCHEMA_TEMPLATES));
   }, []);
+
+  useEffect(() => {
+    if (!isEditing || !schemaSlug) {
+      return;
+    }
+
+    const loadSpecsData = async () => {
+      try {
+        setIsLoadingSpecs(true);
+        const [specs, bundle] = await Promise.all([
+          getSpecs(),
+          getSchemaSpecBundle(schemaSlug),
+        ]);
+
+        setAvailableSpecs(specs.filter((spec) => spec.status !== 'archived'));
+        setSchemaSpecBundle(bundle);
+        setSelectedMainSpecId(bundle.main_spec?.id ?? '');
+        setSelectedAdditionalSpecIds(bundle.attached_specs.filter((spec) => !spec.is_main).map((spec) => spec.id));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Failed to load schema specs');
+      } finally {
+        setIsLoadingSpecs(false);
+      }
+    };
+
+    void loadSpecsData();
+  }, [isEditing, schemaSlug]);
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -721,6 +756,43 @@ const SchemaEditor: React.FC = () => {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleSaveSpecAssignments = async () => {
+    if (!existingSchema) {
+      return;
+    }
+
+    if (!selectedMainSpecId) {
+      toast.error(language === 'en' ? 'Select a main spec first.' : 'Bitte zuerst eine Haupt-Spec auswählen.');
+      return;
+    }
+
+    setIsSavingSpecAssignments(true);
+    try {
+      const bundle = await updateSchemaSpecAttachments(existingSchema.id, {
+        main_spec_id: selectedMainSpecId,
+        additional_spec_ids: selectedAdditionalSpecIds,
+      });
+      setSchemaSpecBundle(bundle);
+      setSelectedMainSpecId(bundle.main_spec?.id ?? selectedMainSpecId);
+      setSelectedAdditionalSpecIds(bundle.attached_specs.filter((spec) => !spec.is_main).map((spec) => spec.id));
+      toast.success(language === 'en' ? 'Spec exposure updated' : 'Spec-Freigabe aktualisiert');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save schema specs');
+    } finally {
+      setIsSavingSpecAssignments(false);
+    }
+  };
+
+  const toggleAdditionalSpec = (specId: string, checked: boolean) => {
+    setSelectedAdditionalSpecIds((current) => {
+      if (checked) {
+        return Array.from(new Set([...current, specId])).filter((id) => id !== selectedMainSpecId);
+      }
+
+      return current.filter((id) => id !== specId);
+    });
   };
 
   const handleStartRegistration = async () => {
@@ -1269,6 +1341,139 @@ const SchemaEditor: React.FC = () => {
             rows={8}
             className="font-mono text-sm"
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <span>🧰</span>
+            <span>{language === 'en' ? 'Spec Registry & Tool Exposure' : 'Spec-Registry & Tool-Freigabe'}</span>
+          </CardTitle>
+          <CardDescription>
+            {language === 'en'
+              ? 'Select the main spec for this schema and toggle additional published/private specs that should be available to agents via REST and MCP.'
+              : 'Wähle die Haupt-Spec für dieses Schema und aktiviere zusätzliche veröffentlichte/private Specs, die Agenten über REST und MCP zur Verfügung stehen sollen.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!isEditing ? (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertTitle>{language === 'en' ? 'Created after first save' : 'Wird nach dem ersten Speichern erstellt'}</AlertTitle>
+              <AlertDescription>
+                {language === 'en'
+                  ? 'Saving a new schema automatically generates a draft main spec, which you can then replace or extend here.'
+                  : 'Beim Speichern eines neuen Schemas wird automatisch eine Entwurfs-Haupt-Spec erzeugt, die du anschließend hier ersetzen oder erweitern kannst.'}
+              </AlertDescription>
+            </Alert>
+          ) : isLoadingSpecs ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
+                <div className="space-y-2">
+                  <Label className="text-base font-semibold">
+                    {language === 'en' ? 'Main Spec' : 'Haupt-Spec'}
+                  </Label>
+                  <Select
+                    value={selectedMainSpecId}
+                    onValueChange={(value) => {
+                      setSelectedMainSpecId(value);
+                      setSelectedAdditionalSpecIds((current) => current.filter((id) => id !== value));
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={language === 'en' ? 'Select the main spec...' : 'Haupt-Spec auswählen...'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableSpecs.map((spec) => (
+                        <SelectItem key={spec.id} value={spec.id}>
+                          {spec.name} ({spec.slug})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="rounded-lg border bg-muted/20 p-4 space-y-2">
+                  <p className="text-sm font-medium">
+                    {language === 'en' ? 'Current discovery summary' : 'Aktuelle Discovery-Zusammenfassung'}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {schemaSpecBundle?.main_spec
+                      ? `${schemaSpecBundle.main_spec.name} (${schemaSpecBundle.main_spec.slug})`
+                      : (language === 'en' ? 'No main spec attached yet.' : 'Noch keine Haupt-Spec angehängt.')}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {(schemaSpecBundle?.attached_specs ?? []).map((spec) => (
+                      <Badge key={spec.id} variant={spec.is_main ? 'default' : 'outline'}>
+                        {spec.name}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <Label className="text-base font-semibold">
+                    {language === 'en' ? 'Additional Specs' : 'Zusätzliche Specs'}
+                  </Label>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => navigate('/specs/new')}>
+                      <FileJson className="h-4 w-4 mr-2" />
+                      {language === 'en' ? 'New Spec' : 'Neue Spec'}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => navigate('/specs')}>
+                      <Eye className="h-4 w-4 mr-2" />
+                      {language === 'en' ? 'Open Registry' : 'Registry öffnen'}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  {availableSpecs.filter((spec) => spec.id !== selectedMainSpecId).map((spec) => (
+                    <label key={spec.id} className="flex items-start gap-3 rounded-lg border p-4 cursor-pointer bg-muted/10">
+                      <Checkbox
+                        checked={selectedAdditionalSpecIds.includes(spec.id)}
+                        onCheckedChange={(checked) => toggleAdditionalSpec(spec.id, Boolean(checked))}
+                      />
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm">{spec.name}</span>
+                          <Badge variant="outline">{spec.status}</Badge>
+                          {spec.is_public && <Badge variant="secondary">Public</Badge>}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{spec.slug}</p>
+                        {spec.description && (
+                          <p className="text-sm text-muted-foreground">{spec.description}</p>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end">
+                <Button type="button" onClick={handleSaveSpecAssignments} disabled={isSavingSpecAssignments || !selectedMainSpecId}>
+                  {isSavingSpecAssignments ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {language === 'en' ? 'Saving Exposure...' : 'Freigabe wird gespeichert...'}
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      {language === 'en' ? 'Save Tool Exposure' : 'Tool-Freigabe speichern'}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

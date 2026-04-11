@@ -6,7 +6,9 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { cancelSchemaRegistration, getSchemaRegistrationStatus } from '@/services/pageService';
+import { getSchemaSpecBundle } from '@/services/specService';
 import type { PageSchema } from '@/types/pagebuilder';
+import type { SchemaSpecBundle } from '@/types/specs';
 import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
 import { API_URL } from '@/lib/apiUrl';
@@ -24,13 +26,22 @@ export const SchemaWaitingScreen: React.FC<SchemaWaitingScreenProps> = ({ schema
   const [registrationComplete, setRegistrationComplete] = useState(false);
   const [frontendUrl, setFrontendUrl] = useState<string | null>(null);
   const [selectedFramework, setSelectedFramework] = useState<'nextjs' | 'sveltekit'>('nextjs');
+  const [schemaSpecBundle, setSchemaSpecBundle] = useState<SchemaSpecBundle | null>(null);
 
   const specUrl = `${API_URL}/api/schemas/${schema.slug}/spec.txt`;
   const specJsonUrl = `${API_URL}/api/schemas/${schema.slug}/spec`;
+  const specsUrl = `${API_URL}/api/specs`;
+  const schemaBundleUrl = `${API_URL}/api/specs/schema/${schema.slug}`;
   const pagesUrl = `${API_URL}/api/schemas/${schema.slug}/pages`;
   const registerUrl = `${API_URL}/api/schemas/${schema.slug}/register`;
   const integrationRequirements = normalizeSchemaIntegrationRequirements(schema.integration_requirements);
   const expectedSlugStructure = getExpectedSlugStructure(schema);
+
+  useEffect(() => {
+    getSchemaSpecBundle(schema.slug)
+      .then(setSchemaSpecBundle)
+      .catch(() => setSchemaSpecBundle(null));
+  }, [schema.slug]);
 
   // Poll for registration status changes
   useEffect(() => {
@@ -69,6 +80,8 @@ export const SchemaWaitingScreen: React.FC<SchemaWaitingScreenProps> = ({ schema
      let prompt = `You are building a ${isNext ? 'Next.js (App Router)' : 'SvelteKit'} frontend for the Specy schema "${schema.name}".
 
   Schema slug: ${schema.slug}
+  Unified spec discovery URL: ${specsUrl}
+  Schema tool bundle URL: ${schemaBundleUrl}
   Specification URL: ${specUrl}
   Machine-readable spec URL: ${specJsonUrl}
   Published pages API: ${pagesUrl}
@@ -83,6 +96,8 @@ export const SchemaWaitingScreen: React.FC<SchemaWaitingScreenProps> = ({ schema
   - Temporary domains allowed: ${integrationRequirements.allow_temporary_frontend_urls ? 'yes' : 'no'}
 
   1. Fetch the full schema specification first:
+    GET ${specsUrl}
+    GET ${schemaBundleUrl}
     GET ${specUrl}
     Also fetch the machine-readable spec if you need to script against it:
     GET ${specJsonUrl}
@@ -229,12 +244,44 @@ export const SchemaWaitingScreen: React.FC<SchemaWaitingScreenProps> = ({ schema
             </h2>
             <p className="text-amber-800/80 dark:text-amber-200/70 leading-relaxed">
               {language === 'en'
-                ? 'Use the specification URL and registration code below to build and connect the frontend for this schema. Once the frontend registers successfully, this screen updates automatically.'
-                : 'Verwende die Spec-URL und den Registrierungscode unten, um das Frontend für dieses Schema zu bauen und zu verbinden. Sobald sich das Frontend erfolgreich registriert, aktualisiert sich dieser Bildschirm automatisch.'}
+                ? 'Use the unified Specs discovery endpoint, the schema tool bundle, and the registration code below to build and connect the frontend for this schema. Once the frontend registers successfully, this screen updates automatically.'
+                : 'Verwende den vereinheitlichten Specs-Discovery-Endpunkt, das Schema-Tool-Bundle und den Registrierungscode unten, um das Frontend für dieses Schema zu bauen und zu verbinden. Sobald sich das Frontend erfolgreich registriert, aktualisiert sich dieser Bildschirm automatisch.'}
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white/60 dark:bg-black/20 rounded-xl p-5 border border-amber-200/80 dark:border-amber-700/40 space-y-3">
+              <h3 className="font-semibold text-amber-900 dark:text-amber-200 text-sm flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                {language === 'en' ? 'Unified Discovery' : 'Vereinheitlichte Discovery'}
+              </h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-white/80 dark:bg-black/30 px-3 py-2 rounded font-mono text-xs break-all">{specsUrl}</code>
+                  <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => handleCopy(specsUrl, 'specs-url')}>
+                    {copiedValue === 'specs-url'
+                      ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      : <Copy className="h-4 w-4 text-amber-700 dark:text-amber-400" />}
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-white/80 dark:bg-black/30 px-3 py-2 rounded font-mono text-xs break-all">{schemaBundleUrl}</code>
+                  <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => handleCopy(schemaBundleUrl, 'schema-bundle-url')}>
+                    {copiedValue === 'schema-bundle-url'
+                      ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      : <Copy className="h-4 w-4 text-amber-700 dark:text-amber-400" />}
+                  </Button>
+                </div>
+                {schemaSpecBundle?.main_spec && (
+                  <p className="text-xs text-amber-800/70 dark:text-amber-300/70">
+                    {language === 'en'
+                      ? `Main spec: ${schemaSpecBundle.main_spec.name} (${schemaSpecBundle.main_spec.slug})`
+                      : `Haupt-Spec: ${schemaSpecBundle.main_spec.name} (${schemaSpecBundle.main_spec.slug})`}
+                  </p>
+                )}
+              </div>
+            </div>
+
             <div className="bg-white/60 dark:bg-black/20 rounded-xl p-5 border border-amber-200/80 dark:border-amber-700/40 space-y-3">
               <h3 className="font-semibold text-amber-900 dark:text-amber-200 text-sm flex items-center gap-2">
                 <Play className="h-4 w-4" />

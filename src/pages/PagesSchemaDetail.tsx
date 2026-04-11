@@ -39,8 +39,10 @@ import {
   deleteRevalidationSecret,
   type RevalidationSecretStatus,
 } from '@/services/pageService';
+import { getSchemaSpecBundle } from '@/services/specService';
 import { SchemaWaitingScreen } from '@/components/pagebuilder/SchemaWaitingScreen';
 import type { PageSchema, PageRecord } from '@/types/pagebuilder';
+import type { SchemaSpecBundle } from '@/types/specs';
 import { useTheme } from '@/contexts/ThemeContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { toast } from 'sonner';
@@ -70,6 +72,7 @@ const PagesSchemaDetail: React.FC = () => {
   const [revalidationSecretInput, setRevalidationSecretInput] = useState('');
   const [isSavingRevalidationSecret, setIsSavingRevalidationSecret] = useState(false);
   const [isDeletingRevalidationSecret, setIsDeletingRevalidationSecret] = useState(false);
+  const [schemaSpecBundle, setSchemaSpecBundle] = useState<SchemaSpecBundle | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!schemaSlug) return;
@@ -78,8 +81,12 @@ const PagesSchemaDetail: React.FC = () => {
       const schemaData = await getSchema(schemaSlug);
       setSchema(schemaData);
 
-      const pagesData = await getPagesBySchema(schemaData.id);
+      const [pagesData, specBundle] = await Promise.all([
+        getPagesBySchema(schemaData.id),
+        getSchemaSpecBundle(schemaData.slug).catch(() => null),
+      ]);
       setPages(pagesData);
+      setSchemaSpecBundle(specBundle);
       setRevalidationSecretStatus(null);
 
       // Check domain health for registered schemas
@@ -415,6 +422,68 @@ const PagesSchemaDetail: React.FC = () => {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{language === 'en' ? 'Specs & Tool Exposure' : 'Specs & Tool-Freigabe'}</CardTitle>
+          <CardDescription>
+            {language === 'en'
+              ? 'These specs are currently attached to this schema and will be surfaced to agents through REST discovery and MCP when the schema is registered.'
+              : 'Diese Specs sind aktuell an dieses Schema angehängt und werden Agenten über REST-Discovery und MCP bereitgestellt, sobald das Schema registriert ist.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {schemaSpecBundle?.main_spec ? (
+            <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge>{language === 'en' ? 'Main Spec' : 'Haupt-Spec'}</Badge>
+                <Badge variant="outline">{schemaSpecBundle.main_spec.status}</Badge>
+                <Badge variant="outline">{schemaSpecBundle.main_spec.is_public ? 'Public' : 'Private'}</Badge>
+              </div>
+              <div>
+                <p className="font-medium">{schemaSpecBundle.main_spec.name}</p>
+                <p className="text-xs text-muted-foreground">{schemaSpecBundle.main_spec.slug}</p>
+              </div>
+              {schemaSpecBundle.main_spec.description && (
+                <p className="text-sm text-muted-foreground">{schemaSpecBundle.main_spec.description}</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {language === 'en' ? 'No main spec attached yet.' : 'Noch keine Haupt-Spec angehängt.'}
+            </p>
+          )}
+
+          {(schemaSpecBundle?.attached_specs.filter((spec) => !spec.is_main).length ?? 0) > 0 ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              {schemaSpecBundle?.attached_specs.filter((spec) => !spec.is_main).map((spec) => (
+                <div key={spec.id} className="rounded-lg border p-4 bg-muted/10 space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-medium">{spec.name}</p>
+                    <Badge variant="outline">{spec.status}</Badge>
+                    <Badge variant="outline">{spec.is_public ? 'Public' : 'Private'}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{spec.slug}</p>
+                  {spec.description && (
+                    <p className="text-sm text-muted-foreground">{spec.description}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {language === 'en' ? 'No additional specs are attached.' : 'Keine zusätzlichen Specs angehängt.'}
+            </p>
+          )}
+
+          <div className="flex items-center justify-end">
+            <Button variant="outline" onClick={() => navigate(`/pages/schema/${schemaSlug}/settings`)}>
+              <Settings className="h-4 w-4 mr-2" />
+              {language === 'en' ? 'Manage Tool Exposure' : 'Tool-Freigabe verwalten'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

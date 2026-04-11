@@ -17,6 +17,7 @@ import {
   type SchemaIntegrationRequirementsRecord,
   validateSlugStructure,
 } from '../lib/schemaRouting';
+import { getSchemaSpecBundle } from '../lib/specRegistry';
 
 const schemas = new Hono<{ Bindings: Env }>();
 
@@ -93,6 +94,23 @@ function buildSpecSections(
   },
   count: number,
   baseUrl: string,
+  specBundle?: {
+    main_spec: {
+      slug: string;
+      name: string;
+      description: string | null;
+      status: string;
+      is_public: boolean;
+    } | null;
+    attached_specs: Array<{
+      slug: string;
+      name: string;
+      description: string | null;
+      status: string;
+      is_public: boolean;
+      is_main: boolean;
+    }>;
+  },
 ): string[] {
   const requirements = normalizeSchemaIntegrationRequirements(schema.integration_requirements);
   const expectedSlugStructure = requirements.required_slug_structure || schema.slug_structure || '/:slug';
@@ -175,6 +193,35 @@ function buildSpecSections(
     JSON.stringify(schema.schema, null, 2),
     '',
   );
+
+  if (specBundle?.main_spec || (specBundle?.attached_specs.length ?? 0) > 0) {
+    const mainSpec = specBundle?.main_spec ?? null;
+    const attachedSpecs = specBundle?.attached_specs ?? [];
+    lines.push('--- SPEC REGISTRY ---', '');
+
+    if (mainSpec) {
+      lines.push(
+        `Main spec: ${mainSpec.name} (${mainSpec.slug})`,
+        `Main spec status: ${mainSpec.status}`,
+        `Main spec visibility: ${mainSpec.is_public ? 'public' : 'private'}`,
+      );
+
+      if (mainSpec.description) {
+        lines.push(`Main spec description: ${mainSpec.description}`);
+      }
+
+      lines.push('');
+    }
+
+    const secondarySpecs = attachedSpecs.filter((spec) => !spec.is_main);
+    if (secondarySpecs.length > 0) {
+      lines.push('Additional attached specs:');
+      secondarySpecs.forEach((spec) => {
+        lines.push(`- ${spec.name} (${spec.slug}) [${spec.status}${spec.is_public ? ', public' : ', private'}]`);
+      });
+      lines.push('');
+    }
+  }
 
   lines.push(
     '--- CONTENT BLOCK TYPES ---',
@@ -743,7 +790,8 @@ schemas.get('/:slug/spec.txt', async (c) => {
     .select('*', { count: 'exact', head: true })
     .eq('schema_id', schema.id);
 
-  const lines = buildSpecSections(schema, count ?? 0, new URL(c.req.url).origin);
+  const specBundle = await getSchemaSpecBundle(c.env, { id: schema.id });
+  const lines = buildSpecSections(schema, count ?? 0, new URL(c.req.url).origin, specBundle);
   lines.push(
     '--- CODE BLOCK FIELD TYPE ---',
     '',
@@ -782,9 +830,13 @@ schemas.get('/:slug/spec', async (c) => {
     .select('*', { count: 'exact', head: true })
     .eq('schema_id', schema.id);
 
+  const specBundle = await getSchemaSpecBundle(c.env, { id: schema.id });
+
   return c.json({
     schema,
     page_count: count ?? 0,
+    main_spec: specBundle.main_spec,
+    attached_specs: specBundle.attached_specs,
     integration_requirements: normalizeSchemaIntegrationRequirements(schema.integration_requirements),
     spec_text_url: `${new URL(c.req.url).origin}/api/schemas/${slug}/spec.txt`,
     pages_url: `${new URL(c.req.url).origin}/api/schemas/${slug}/pages`,

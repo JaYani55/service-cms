@@ -31,6 +31,8 @@ import Forms from "./pages/Forms";
 import FormEditor from "./pages/FormEditor";
 import FormAnswers from "./pages/FormAnswers";
 import FormSharePage from "./pages/FormSharePage";
+import Specs from "./pages/Specs";
+import SpecEditor from "./pages/SpecEditor";
 
 // Import components
 import Layout from "./components/layout/Layout";
@@ -225,6 +227,9 @@ const AppContent = () => {
           <Route path="/forms/new" element={<ProtectedRoute requiredRole="user"><FormEditor /></ProtectedRoute>} />
           <Route path="/forms/:formId" element={<ProtectedRoute requiredRole="user"><FormEditor /></ProtectedRoute>} />
           <Route path="/forms/:formId/answers" element={<ProtectedRoute requiredRole="user"><FormAnswers /></ProtectedRoute>} />
+          <Route path="/specs" element={<ProtectedRoute requiredRole="user"><Specs /></ProtectedRoute>} />
+          <Route path="/specs/new" element={<ProtectedRoute requiredRole="user"><SpecEditor /></ProtectedRoute>} />
+          <Route path="/specs/:specSlug" element={<ProtectedRoute requiredRole="user"><SpecEditor /></ProtectedRoute>} />
 
           {/* Admin Routes */}
           <Route path="/admin" element={<ProtectedRoute requiredRole="user"><Verwaltung /></ProtectedRoute>} />

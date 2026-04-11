@@ -11,6 +11,7 @@ import configRoute from './routes/config';
 import mediaRoute from './routes/media';
 import pluginsRoute from './routes/plugins';
 import formsRoute from './routes/forms';
+import specsRoute from './routes/specs';
 import { mountPluginRoutes } from './plugin-routes';
 import { agentLogger } from './middleware/agentLogger';
 
@@ -32,10 +33,11 @@ app.get('/', (c) => {
     timestamp: new Date().toISOString(),
     endpoints: {
       schemas: `${baseUrl}/api/schemas`,
+      specs: `${baseUrl}/api/specs`,
       plugins: `${baseUrl}/api/plugins`,
       mcp: `${baseUrl}/mcp`,
     },
-    description: 'Start at /api/schemas to discover available page schemas, or connect via /mcp for MCP tool integration.',
+    description: 'Start at /api/specs for unified agent-readable tool discovery, /api/schemas for schema-centric discovery, or connect via /mcp for MCP tool integration.',
   });
 });
 
@@ -53,6 +55,7 @@ app.route('/api/config', configRoute);
 app.route('/api/media', mediaRoute);
 app.route('/api/plugins', pluginsRoute);
 app.route('/api/forms', formsRoute);
+app.route('/api/specs', specsRoute);
 app.route('/mcp', mcpRoute);
 
 // Plugin API routes (auto-wired from api/plugin-routes.ts)
