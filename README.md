@@ -77,3 +77,30 @@ npm run build
 # Deploy API to Cloudflare
 npm run deploy:api
 ```
+
+## Updating A Live Deployment
+Use the updater when you want to pull the latest code from the canonical GitHub remote, run integrity checks, rebuild, and redeploy in one step.
+
+```sh
+# Cross-platform via npm
+npm run cf:update
+
+# Windows
+scripts\cf-update.bat
+
+# Linux / macOS
+bash scripts/cf-update.sh
+```
+
+The updater performs these checks by default:
+
+- Verifies `origin` points to `https://github.com/JaYani55/specy.git`
+- Refuses to pull over tracked local changes unless `--allow-dirty` is passed
+- Confirms `wrangler.jsonc` exists and no placeholder setup values remain
+- Runs `npm install`, `npm run lint`, `npm run build`, and `npm run deploy`
+
+You can run the integrity checks without pulling or deploying via:
+
+```sh
+npm run cf:update:check
+```

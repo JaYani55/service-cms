@@ -173,7 +173,7 @@ Each ContentBlock has { id, type } + type-specific fields:
 
   export async function POST(req: NextRequest) {
     const authHeader = req.headers.get('authorization');
-    const secret = authHeader?.replace(/^Bearer\s+/i, '') ?? null;
+    const secret = authHeader?.replace(/^Bearer\\s+/i, '') ?? null;
     const path   = req.nextUrl.searchParams.get('path');   // page_slug from CMS
 
     if (secret !== process.env.REVALIDATION_SECRET) {
@@ -221,7 +221,7 @@ Each ContentBlock has { id, type } + type-specific fields:
 
   export const POST: RequestHandler = async ({ params, request, platform }) => {
     const authHeader = request.headers.get('authorization');
-    const secret = authHeader?.replace(/^Bearer\s+/i, '') ?? null;
+    const secret = authHeader?.replace(/^Bearer\\s+/i, '') ?? null;
 
     if (secret !== process.env.REVALIDATION_SECRET) {
       throw error(401, 'Invalid secret');

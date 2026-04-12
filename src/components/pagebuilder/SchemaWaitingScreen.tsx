@@ -164,7 +164,23 @@ export const SchemaWaitingScreen: React.FC<SchemaWaitingScreenProps> = ({ schema
   `;
 
      return prompt;
-    }, [registerUrl, schema.name, schema.registration_code, schema.slug, selectedFramework, specUrl]);
+    }, [
+      expectedSlugStructure,
+      integrationRequirements.allow_temporary_frontend_urls,
+      integrationRequirements.canonical_frontend_url,
+      integrationRequirements.page_discovery_mode,
+      integrationRequirements.route_ownership,
+      pagesUrl,
+      registerUrl,
+      schema.name,
+      schema.registration_code,
+      schema.slug,
+      schemaBundleUrl,
+      selectedFramework,
+      specJsonUrl,
+      specUrl,
+      specsUrl,
+    ]);
 
   const handleCancel = async () => {
     setIsCancelling(true);

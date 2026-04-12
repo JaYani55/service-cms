@@ -273,8 +273,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userRole = UserRole.SUPERADMIN;
       } else if (userRoleNames.includes('admin')) {
         userRole = UserRole.ADMIN;
-      } else if (userRoleNames.includes('admin')) {
-        userRole = UserRole.ADMIN;
       } else if (userRoleNames.includes('user') || userRoleNames.includes('staff')) {
         userRole = UserRole.USER;
       }

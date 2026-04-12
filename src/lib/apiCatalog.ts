@@ -242,7 +242,7 @@ export const API_CATALOG: ApiEndpointDefinition[] = [
         status: 404,
         description: 'Schema not found.',
         example: `{
-  "error": "Schema \"missing\" not found"
+  "error": "Schema \\"missing\\" not found"
 }`,
       },
     ],
@@ -887,7 +887,7 @@ export const API_CATALOG: ApiEndpointDefinition[] = [
   "deleted": "SUPABASE_URL"
 }` },
       { status: 404, description: 'Secret not found.', example: `{
-  "error": "Secret \"SUPABASE_URL\" not found in store"
+  "error": "Secret \\"SUPABASE_URL\\" not found in store"
 }` },
     ],
     sideEffects: ['Deletes secret material from Cloudflare Secrets Store.'],
