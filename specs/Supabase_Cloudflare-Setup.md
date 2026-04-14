@@ -68,13 +68,16 @@ Step 6  Supabase credentials         Collects URL, publishable key, secret key, 
         ↳ Store SUPABASE_SECRET_KEY       Cloudflare Secrets Store
         ↳ Write .env                      VITE_SUPABASE_URL + VITE_SUPABASE_PUBLISHABLE_KEY
         ↳ Patch wrangler.jsonc vars       SUPABASE_URL, STORAGE_PROVIDER, STORAGE_BUCKET
-Step 7  Database migrations          Supabase Management API — 15 SQL files in order, plus
+Step 7  Database migrations          Supabase Management API — ordered SQL files, plus
                                      storage RLS policies (Supabase provider only, generated
                                      from storage.default.sql with your bucket name)
         ↳ Register Auth hook              PATCH /v1/projects/{ref}/config/auth
-Step 8  First super-admin user       Creates auth user, role, profile, and role assignment
-Step 9  Build                        npm run build (Vite reads .env, bakes VITE_ vars in)
-Step 10 Deploy                       wrangler deploy
+Step 8  Edge Function sync + deploy  Syncs Supabase function secrets, stages the top-level
+                                     function sources into a temporary Supabase CLI layout,
+                                     and deploys send_email
+Step 9  First super-admin user       Creates auth user, role, profile, and role assignment
+Step 10 Build                        npm run build (Vite reads .env, bakes VITE_ vars in)
+Step 11 Deploy                       wrangler deploy
 ```
 
 ### Why `.env` is written before build
@@ -165,6 +168,8 @@ Only one secret uses the Secrets Store — `SUPABASE_SECRET_KEY`, bound as `SS_S
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | `.env` (generated) | Supabase publishable key — baked into JS bundle |
 
 The `.env` file is written by the wizard in Step 6 and consumed by `npm run build` in Step 9. See `.env.example` for the expected format.
+
+For Supabase Edge Functions introduced by the mail delivery feature, the setup flow syncs `APP_SUPABASE_SECRET_KEY` and `SECRETS_ENCRYPTION_KEY`. The function uses Supabase's built-in `SUPABASE_URL` runtime variable and a custom non-reserved key name for the privileged credential because hosted Edge Functions reject user-defined `SUPABASE_*` secret names. The source stays under the repository's top-level `functions/` directory; the wizard stages that directory into a temporary `supabase/functions/...` layout before calling the Supabase CLI.
 
 ---
 
@@ -386,7 +391,22 @@ Get a PAT from [supabase.com/dashboard/account/tokens](https://supabase.com/dash
 
 See [section 8 — Manual registration](#manual-registration-if-the-wizard-api-call-fails).
 
-### 10.8 Build and deploy
+### 10.8 Deploy the send_email edge function
+
+The mail delivery function is stored in the repository under `functions/send_email`, but the Supabase CLI expects a `supabase/functions/<name>` project layout when bundling for deploy. Stage a temporary workdir and deploy from there:
+
+```powershell
+$deployRoot = Join-Path $PWD ".supabase-deploy"
+Remove-Item $deployRoot -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Path (Join-Path $deployRoot "supabase/functions/send_email") -Force | Out-Null
+Copy-Item ".\functions\config.toml" (Join-Path $deployRoot "supabase\config.toml") -Force
+Copy-Item ".\functions\send_email\*" (Join-Path $deployRoot "supabase\functions\send_email") -Recurse -Force
+npx -y supabase secrets set APP_SUPABASE_SECRET_KEY=<your-supabase-secret-key> SECRETS_ENCRYPTION_KEY=<your-secrets-encryption-key> --project-ref <project-ref> --workdir $deployRoot
+npx -y supabase functions deploy send_email --use-api --project-ref <project-ref> --workdir $deployRoot
+Remove-Item $deployRoot -Recurse -Force -ErrorAction SilentlyContinue
+```
+
+### 10.9 Build and deploy
 
 ```bash
 npm run build
@@ -430,6 +450,10 @@ The PAT does not have sufficient permissions or has expired. Create a new PAT at
 ### `wrangler secret put` fails
 
 The Worker must exist before secrets can be stored. Run a `wrangler deploy` (with placeholder values if necessary) to create the Worker, then re-run `npm run setup`.
+
+### Supabase Edge Function deploy fails with `Could not find npm package 'nodemailer'`
+
+The deployed function source is pinned to a version that the Supabase bundler cannot resolve. Pull the current code before deploying; the function now uses a function-local dependency config under `functions/send_email/deno.json` with a valid Nodemailer version.
 
 ### `Could not store … — set it manually via /verwaltung/connections UI`
 

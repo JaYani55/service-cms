@@ -57,8 +57,11 @@ import {
   getEnvStatus,
   upsertSecret,
   deleteSecret,
+  getMailConfigSettings,
   getStorageConfigSettings,
+  testMailConnection,
   updateStorageConfigSettings,
+  updateMailConfigSettings,
   getMediaConfig,
   testMediaConnection,
   SECRETS_MANIFEST,
@@ -67,8 +70,12 @@ import {
   type SecretDefinition,
   type MediaConfig,
   type EnvStatusEntry,
+  type MailConfigSettings,
+  type MailSecretStatus,
   type StorageConfigSettings,
 } from '@/services/connectionsService';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 
 const OPERATIONAL_CONFIG_SECRET_NAMES = new Set(['SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'STORAGE_PROVIDER', 'STORAGE_BUCKET', 'R2_PUBLIC_URL']);
 
@@ -89,6 +96,19 @@ interface EditState {
 
 interface StorageConfigState extends StorageConfigSettings {
   saving: boolean;
+}
+
+interface MailConfigState extends MailConfigSettings, MailSecretStatus {
+  smtpPassword: string;
+  resendApiKey: string;
+  saving: boolean;
+  testing: boolean;
+  lastTest: {
+    ok: boolean;
+    provider?: 'smtp' | 'resend';
+    detail?: string;
+    error?: string;
+  } | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -151,6 +171,23 @@ const VerwaltungConnections: React.FC = () => {
     r2PublicUrl: '',
     saving: false,
   });
+  const [mailConfig, setMailConfig] = useState<MailConfigState>({
+    provider: '',
+    fromName: '',
+    fromEmail: '',
+    replyToEmail: '',
+    smtpHost: '',
+    smtpPort: 587,
+    smtpSecure: false,
+    smtpUsername: '',
+    smtpPassword: '',
+    resendApiKey: '',
+    smtpPasswordConfigured: false,
+    resendApiKeyConfigured: false,
+    saving: false,
+    testing: false,
+    lastTest: null,
+  });
 
   // Media storage live status
   const [mediaConfig, setMediaConfig] = useState<MediaConfig | null>(null);
@@ -210,6 +247,23 @@ const VerwaltungConnections: React.FC = () => {
     }
   }, []);
 
+  const loadMailConfig = useCallback(async () => {
+    try {
+      const config = await getMailConfigSettings();
+      setMailConfig((current) => ({
+        ...current,
+        ...config.mail,
+        ...config.secrets,
+        smtpPassword: '',
+        resendApiKey: '',
+        saving: false,
+        testing: false,
+      }));
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to load mail configuration');
+    }
+  }, []);
+
   const loadMediaStatus = useCallback(async () => {
     try {
       const cfg = await getMediaConfig();
@@ -222,8 +276,9 @@ const VerwaltungConnections: React.FC = () => {
   useEffect(() => {
     loadSecrets();
     loadStorageConfig();
+    loadMailConfig();
     loadMediaStatus();
-  }, [loadSecrets, loadStorageConfig, loadMediaStatus]);
+  }, [loadSecrets, loadStorageConfig, loadMailConfig, loadMediaStatus]);
 
   // Build merged list: manifest entry + CF secrets store status + env-var status
   const secretsWithStatus: SecretWithStatus[] = SECRETS_MANIFEST.map((def) => ({
@@ -327,6 +382,75 @@ const VerwaltungConnections: React.FC = () => {
     }
   };
 
+  const saveMailConfig = async () => {
+    if (!mailConfig.provider) {
+      toast.error('Provider is required');
+      return;
+    }
+
+    if (!mailConfig.fromEmail.trim()) {
+      toast.error('From e-mail is required');
+      return;
+    }
+
+    setMailConfig((current) => ({ ...current, saving: true }));
+    try {
+      const result = await updateMailConfigSettings({
+        provider: mailConfig.provider,
+        fromName: mailConfig.fromName,
+        fromEmail: mailConfig.fromEmail,
+        replyToEmail: mailConfig.replyToEmail,
+        smtpHost: mailConfig.smtpHost,
+        smtpPort: Number(mailConfig.smtpPort) || 587,
+        smtpSecure: mailConfig.smtpSecure,
+        smtpUsername: mailConfig.smtpUsername,
+        smtpPassword: mailConfig.smtpPassword,
+        resendApiKey: mailConfig.resendApiKey,
+      });
+
+      setMailConfig((current) => ({
+        ...current,
+        ...result.mail,
+        ...result.secrets,
+        smtpPassword: '',
+        resendApiKey: '',
+        saving: false,
+      }));
+      toast.success('Mail configuration saved');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save mail configuration');
+      setMailConfig((current) => ({ ...current, saving: false }));
+    }
+  };
+
+  const runMailTest = async () => {
+    setMailConfig((current) => ({ ...current, testing: true, lastTest: null }));
+    try {
+      const result = await testMailConnection();
+      setMailConfig((current) => ({
+        ...current,
+        testing: false,
+        lastTest: {
+          ok: result.success,
+          provider: result.provider,
+          detail: result.detail,
+        },
+      }));
+      toast.success('Mail connection succeeded');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Mail test failed';
+      setMailConfig((current) => ({
+        ...current,
+        testing: false,
+        lastTest: {
+          ok: false,
+          error: message,
+        },
+      }));
+      toast.error(message);
+    }
+  };
+
   // Extra CF secrets not in the manifest
   const extraCfSecrets = cfSecrets.filter(
     (s) => !SECRETS_MANIFEST.some((m) => m.name === s.name) && !OPERATIONAL_CONFIG_SECRET_NAMES.has(s.name),
@@ -363,7 +487,17 @@ const VerwaltungConnections: React.FC = () => {
               </div>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={loadSecrets} disabled={loading}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void loadSecrets();
+              void loadStorageConfig();
+              void loadMailConfig();
+              void loadMediaStatus();
+            }}
+            disabled={loading}
+          >
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
@@ -451,6 +585,181 @@ const VerwaltungConnections: React.FC = () => {
               <AlertDescription className="text-xs">
                 Bootstrap values such as <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> still come from deployment configuration.
                 They are intentionally no longer shown as editable secrets in this page.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FlaskConical className="h-4 w-4" />
+              Mail Configuration
+            </CardTitle>
+            <CardDescription>
+              Configure the outbound mail provider, sender identity, and provider credentials used by form notifications.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Provider</Label>
+                <Select
+                  value={mailConfig.provider}
+                  onValueChange={(value) => setMailConfig((current) => ({ ...current, provider: value as MailConfigSettings['provider'] }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="smtp">SMTP</SelectItem>
+                    <SelectItem value="resend">Resend</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="mail-from-name">From Name</Label>
+                <Input
+                  id="mail-from-name"
+                  value={mailConfig.fromName}
+                  onChange={(event) => setMailConfig((current) => ({ ...current, fromName: event.target.value }))}
+                  placeholder="ServiceCMS"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="mail-from-email">From E-Mail</Label>
+                <Input
+                  id="mail-from-email"
+                  value={mailConfig.fromEmail}
+                  onChange={(event) => setMailConfig((current) => ({ ...current, fromEmail: event.target.value }))}
+                  placeholder="noreply@example.com"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="mail-reply-to">Reply-To</Label>
+                <Input
+                  id="mail-reply-to"
+                  value={mailConfig.replyToEmail}
+                  onChange={(event) => setMailConfig((current) => ({ ...current, replyToEmail: event.target.value }))}
+                  placeholder="support@example.com"
+                />
+              </div>
+            </div>
+
+            {mailConfig.provider === 'smtp' && (
+              <div className="rounded-lg border p-4 space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="mail-smtp-host">SMTP Host</Label>
+                    <Input
+                      id="mail-smtp-host"
+                      value={mailConfig.smtpHost}
+                      onChange={(event) => setMailConfig((current) => ({ ...current, smtpHost: event.target.value }))}
+                      placeholder="smtp.resend.com"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="mail-smtp-port">SMTP Port</Label>
+                    <Input
+                      id="mail-smtp-port"
+                      type="number"
+                      value={mailConfig.smtpPort}
+                      onChange={(event) => setMailConfig((current) => ({ ...current, smtpPort: Number(event.target.value) || 587 }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="mail-smtp-username">SMTP Username</Label>
+                    <Input
+                      id="mail-smtp-username"
+                      value={mailConfig.smtpUsername}
+                      onChange={(event) => setMailConfig((current) => ({ ...current, smtpUsername: event.target.value }))}
+                      placeholder="resend"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="mail-smtp-password">SMTP Password</Label>
+                    <Input
+                      id="mail-smtp-password"
+                      type="password"
+                      value={mailConfig.smtpPassword}
+                      onChange={(event) => setMailConfig((current) => ({ ...current, smtpPassword: event.target.value }))}
+                      placeholder={mailConfig.smtpPasswordConfigured ? 'Leave blank to keep current password' : 'Enter SMTP password'}
+                    />
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Badge variant={mailConfig.smtpPasswordConfigured ? 'default' : 'outline'}>
+                        {mailConfig.smtpPasswordConfigured ? 'Password stored' : 'Password missing'}
+                      </Badge>
+                      <span>{mailConfig.smtpPasswordConfigured ? 'Stored securely in managed secrets' : 'Required before sending mail'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between rounded-md bg-muted/40 p-3">
+                  <div>
+                    <Label>Use TLS immediately</Label>
+                    <p className="text-xs text-muted-foreground">Enable this for providers that expect SMTPS on connect.</p>
+                  </div>
+                  <Switch checked={mailConfig.smtpSecure} onCheckedChange={(value) => setMailConfig((current) => ({ ...current, smtpSecure: value }))} />
+                </div>
+              </div>
+            )}
+
+            {mailConfig.provider === 'resend' && (
+              <div className="rounded-lg border p-4 space-y-2">
+                <Label htmlFor="mail-resend-key">Resend API Key</Label>
+                <Input
+                  id="mail-resend-key"
+                  type="password"
+                  value={mailConfig.resendApiKey}
+                  onChange={(event) => setMailConfig((current) => ({ ...current, resendApiKey: event.target.value }))}
+                  placeholder={mailConfig.resendApiKeyConfigured ? 'Leave blank to keep current API key' : 're_...'}
+                />
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Badge variant={mailConfig.resendApiKeyConfigured ? 'default' : 'outline'}>
+                    {mailConfig.resendApiKeyConfigured ? 'API key stored' : 'API key missing'}
+                  </Badge>
+                  <span>{mailConfig.resendApiKeyConfigured ? 'Stored securely in managed secrets' : 'Required before sending mail'}</span>
+                </div>
+              </div>
+            )}
+
+            {mailConfig.lastTest && (
+              <div className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm ${mailConfig.lastTest.ok ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400' : 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400'}`}>
+                {mailConfig.lastTest.ok ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <XCircle className="h-4 w-4 shrink-0" />}
+                <span>
+                  {mailConfig.lastTest.ok
+                    ? `Connection OK${mailConfig.lastTest.provider ? ` (${mailConfig.lastTest.provider})` : ''}${mailConfig.lastTest.detail ? ` — ${mailConfig.lastTest.detail}` : ''}`
+                    : `Connection failed: ${mailConfig.lastTest.error}`}
+                </span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <Button onClick={saveMailConfig} disabled={mailConfig.saving}>
+                {mailConfig.saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save mail config
+              </Button>
+              <Button variant="outline" onClick={loadMailConfig} disabled={mailConfig.saving || mailConfig.testing}>
+                Reload config
+              </Button>
+              <Button variant="outline" onClick={runMailTest} disabled={mailConfig.testing || mailConfig.saving || !mailConfig.provider}>
+                {mailConfig.testing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FlaskConical className="mr-2 h-4 w-4" />}
+                Test connection
+              </Button>
+            </div>
+
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                Provider secrets are write-only. Leave password or API key fields empty when you want to keep the stored value unchanged.
               </AlertDescription>
             </Alert>
           </CardContent>

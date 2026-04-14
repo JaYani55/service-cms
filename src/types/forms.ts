@@ -28,6 +28,27 @@ export interface FormFieldDefinition {
 
 export type FormSchemaDefinition = Record<string, Omit<FormFieldDefinition, 'name'>>;
 
+export interface FormNotificationRecipient {
+  id: string;
+  staff_id: string;
+  display_name: string;
+  email: string | null;
+  account_user_id: string | null;
+}
+
+export interface FormNotificationSettings {
+  notify_owner: boolean;
+  notify_staff: boolean;
+  recipients: FormNotificationRecipient[];
+}
+
+export interface FormNotificationStaffOption {
+  id: string;
+  display_name: string;
+  email: string | null;
+  account_user_id: string | null;
+}
+
 export interface FormRecord {
   id: string;
   name: string;
@@ -40,6 +61,8 @@ export interface FormRecord {
   share_slug: string | null;
   requires_auth: boolean;
   api_enabled: boolean;
+  owner_user_id?: string | null;
+  notification_settings?: FormNotificationSettings | null;
   created_at: string;
   updated_at: string;
   published_at: string | null;

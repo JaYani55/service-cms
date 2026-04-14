@@ -1,6 +1,14 @@
 import { supabase } from '@/lib/supabase';
 import { API_URL } from '@/lib/apiUrl';
-import type { FormAnswerRecord, FormRecord, FormSchemaDefinition, PublicFormDefinition } from '@/types/forms';
+import type {
+  FormAnswerRecord,
+  FormNotificationRecipient,
+  FormNotificationSettings,
+  FormNotificationStaffOption,
+  FormRecord,
+  FormSchemaDefinition,
+  PublicFormDefinition,
+} from '@/types/forms';
 import { generateFormSlug, validateShareSlug } from '@/utils/forms';
 
 const getAuthToken = async (): Promise<string | null> => {
@@ -37,24 +45,64 @@ export const getPublishedForms = async (): Promise<FormRecord[]> => {
   return (data ?? []) as FormRecord[];
 };
 
-export const getForm = async (idOrSlug: string): Promise<FormRecord> => {
-  const bySlug = await supabase
-    .from('forms')
-    .select('*')
-    .eq('slug', idOrSlug)
-    .maybeSingle();
-
-  if (bySlug.data) return bySlug.data as FormRecord;
-
-  const byId = await supabase
-    .from('forms')
-    .select('*')
-    .eq('id', idOrSlug)
-    .single();
-
-  if (byId.error) throw new Error(byId.error.message);
-  return byId.data as FormRecord;
+const getCurrentUserId = async (): Promise<string | null> => {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw new Error(error.message);
+  return data.user?.id ?? null;
 };
+
+const getFormNotificationSettings = async (formId: string): Promise<FormNotificationSettings> => {
+  const [{ data: settingsRow, error: settingsError }, { data: recipientRows, error: recipientsError }] = await Promise.all([
+    supabase
+      .from('form_notification_settings')
+      .select('notify_owner, notify_staff')
+      .eq('form_id', formId)
+      .maybeSingle(),
+    supabase
+      .from('form_notification_recipients')
+      .select('id, staff_id')
+      .eq('form_id', formId),
+  ]);
+
+  if (settingsError) throw new Error(settingsError.message);
+  if (recipientsError) throw new Error(recipientsError.message);
+
+  const staffIds = (recipientRows ?? []).map((row) => row.staff_id as string);
+  let recipients: FormNotificationRecipient[] = [];
+
+  if (staffIds.length > 0) {
+    const { data: staffRows, error: staffError } = await supabase
+      .from('staff')
+      .select('id, display_name, email, account_user_id')
+      .in('id', staffIds)
+      .order('display_name', { ascending: true });
+
+    if (staffError) throw new Error(staffError.message);
+
+    const staffMap = new Map((staffRows ?? []).map((row) => [row.id as string, row]));
+    recipients = (recipientRows ?? []).map((row) => {
+      const staff = staffMap.get(row.staff_id as string);
+      return {
+        id: row.id as string,
+        staff_id: row.staff_id as string,
+        display_name: (staff?.display_name as string | undefined) ?? 'Unknown',
+        email: (staff?.email as string | null | undefined) ?? null,
+        account_user_id: (staff?.account_user_id as string | null | undefined) ?? null,
+      };
+    });
+  }
+
+  return {
+    notify_owner: Boolean(settingsRow?.notify_owner),
+    notify_staff: Boolean(settingsRow?.notify_staff),
+    recipients,
+  };
+};
+
+const withNotificationSettings = async (form: FormRecord): Promise<FormRecord> => ({
+  ...form,
+  notification_settings: await getFormNotificationSettings(form.id),
+});
 
 interface SaveFormInput {
   name: string;
@@ -66,9 +114,14 @@ interface SaveFormInput {
   share_slug?: string | null;
   requires_auth: boolean;
   api_enabled: boolean;
+  notification_settings?: {
+    notify_owner: boolean;
+    notify_staff: boolean;
+    staff_recipient_ids: string[];
+  };
 }
 
-const normalizeInput = (input: SaveFormInput) => {
+const normalizeInput = (input: SaveFormInput, ownerUserId?: string | null) => {
   const slug = generateFormSlug(input.name);
   const shareSlug = input.share_enabled ? generateFormSlug(input.share_slug || input.name) : null;
 
@@ -88,12 +141,80 @@ const normalizeInput = (input: SaveFormInput) => {
     share_slug: shareSlug,
     requires_auth: input.requires_auth,
     api_enabled: input.api_enabled,
+    owner_user_id: ownerUserId ?? undefined,
     published_at: input.status === 'published' ? new Date().toISOString() : null,
   };
 };
 
+const syncFormNotificationSettings = async (formId: string, notificationSettings?: SaveFormInput['notification_settings']): Promise<void> => {
+  const normalized = {
+    notify_owner: Boolean(notificationSettings?.notify_owner),
+    notify_staff: Boolean(notificationSettings?.notify_staff),
+    staff_recipient_ids: [...new Set((notificationSettings?.staff_recipient_ids ?? []).filter(Boolean))],
+  };
+
+  const { error: upsertSettingsError } = await supabase
+    .from('form_notification_settings')
+    .upsert({
+      form_id: formId,
+      notify_owner: normalized.notify_owner,
+      notify_staff: normalized.notify_staff,
+    }, { onConflict: 'form_id' });
+
+  if (upsertSettingsError) throw new Error(upsertSettingsError.message);
+
+  const { data: existingRecipients, error: existingRecipientsError } = await supabase
+    .from('form_notification_recipients')
+    .select('staff_id')
+    .eq('form_id', formId);
+
+  if (existingRecipientsError) throw new Error(existingRecipientsError.message);
+
+  const existingStaffIds = (existingRecipients ?? []).map((row) => row.staff_id as string);
+  const staffIdsToDelete = existingStaffIds.filter((staffId) => !normalized.staff_recipient_ids.includes(staffId));
+  const staffIdsToInsert = normalized.staff_recipient_ids.filter((staffId) => !existingStaffIds.includes(staffId));
+
+  if (staffIdsToDelete.length > 0) {
+    const { error: deleteError } = await supabase
+      .from('form_notification_recipients')
+      .delete()
+      .eq('form_id', formId)
+      .in('staff_id', staffIdsToDelete);
+
+    if (deleteError) throw new Error(deleteError.message);
+  }
+
+  if (staffIdsToInsert.length > 0) {
+    const { error: insertRecipientsError } = await supabase
+      .from('form_notification_recipients')
+      .insert(staffIdsToInsert.map((staffId) => ({ form_id: formId, staff_id: staffId })));
+
+    if (insertRecipientsError) throw new Error(insertRecipientsError.message);
+  }
+};
+
+export const getForm = async (idOrSlug: string): Promise<FormRecord> => {
+  const bySlug = await supabase
+    .from('forms')
+    .select('*')
+    .eq('slug', idOrSlug)
+    .maybeSingle();
+
+  if (bySlug.data) return withNotificationSettings(bySlug.data as FormRecord);
+
+  const byId = await supabase
+    .from('forms')
+    .select('*')
+    .eq('id', idOrSlug)
+    .single();
+
+  if (byId.error) throw new Error(byId.error.message);
+  return withNotificationSettings(byId.data as FormRecord);
+};
+
 export const createForm = async (input: SaveFormInput): Promise<FormRecord> => {
-  const payload = normalizeInput(input);
+  const ownerUserId = await getCurrentUserId();
+  const payload = normalizeInput(input, ownerUserId);
   const { data, error } = await supabase
     .from('forms')
     .insert(payload)
@@ -101,7 +222,9 @@ export const createForm = async (input: SaveFormInput): Promise<FormRecord> => {
     .single();
 
   if (error) throw new Error(error.message);
-  return data as FormRecord;
+  const form = data as FormRecord;
+  await syncFormNotificationSettings(form.id, input.notification_settings);
+  return withNotificationSettings(form);
 };
 
 export const updateForm = async (id: string, input: SaveFormInput): Promise<FormRecord> => {
@@ -114,7 +237,26 @@ export const updateForm = async (id: string, input: SaveFormInput): Promise<Form
     .single();
 
   if (error) throw new Error(error.message);
-  return data as FormRecord;
+  const form = data as FormRecord;
+  await syncFormNotificationSettings(form.id, input.notification_settings);
+  return withNotificationSettings(form);
+};
+
+export const getFormNotificationStaffOptions = async (): Promise<FormNotificationStaffOption[]> => {
+  const { data, error } = await supabase
+    .from('staff')
+    .select('id, display_name, email, account_user_id')
+    .eq('status', 'active')
+    .order('display_name', { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    display_name: row.display_name as string,
+    email: (row.email as string | null | undefined) ?? null,
+    account_user_id: (row.account_user_id as string | null | undefined) ?? null,
+  }));
 };
 
 export const deleteForm = async (id: string): Promise<void> => {

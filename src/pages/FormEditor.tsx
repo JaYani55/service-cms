@@ -1,20 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CheckCircle2, ClipboardList, Loader2, Save, Wand2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Bell, CheckCircle2, ClipboardList, Loader2, Save, Users, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { FormSchemaBuilder } from '@/components/forms/FormSchemaBuilder';
 import { AdminCard, AdminPageLayout } from '@/components/admin/ui';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useTheme } from '@/contexts/ThemeContext';
-import { createForm, getForm, updateForm } from '@/services/formService';
-import { type FormFieldDefinition, type FormRecord } from '@/types/forms';
+import { createForm, getForm, getFormNotificationStaffOptions, updateForm } from '@/services/formService';
+import { type FormFieldDefinition, type FormNotificationStaffOption, type FormRecord } from '@/types/forms';
 import { formFieldsToSchema, formatFormSchema, parseFormSchema } from '@/utils/forms';
 
 const DEFAULT_SCHEMA = {
@@ -74,8 +75,30 @@ const FormEditor = () => {
   const [shareSlug, setShareSlug] = useState('');
   const [requiresAuth, setRequiresAuth] = useState(false);
   const [apiEnabled, setApiEnabled] = useState(true);
+  const [notifyOwner, setNotifyOwner] = useState(false);
+  const [notifyStaff, setNotifyStaff] = useState(false);
+  const [staffRecipientIds, setStaffRecipientIds] = useState<string[]>([]);
+  const [staffOptions, setStaffOptions] = useState<FormNotificationStaffOption[]>([]);
+  const [staffSearch, setStaffSearch] = useState('');
+  const [staffOptionsLoading, setStaffOptionsLoading] = useState(false);
   const [builderFields, setBuilderFields] = useState<FormFieldDefinition[]>(withEditorIds(parseFormSchema(JSON.stringify(DEFAULT_SCHEMA)).fields));
   const schemaSyncSourceRef = useRef<'builder' | 'json' | 'load'>('load');
+
+  useEffect(() => {
+    const loadStaffOptions = async () => {
+      try {
+        setStaffOptionsLoading(true);
+        const options = await getFormNotificationStaffOptions();
+        setStaffOptions(options);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Failed to load staff recipients.');
+      } finally {
+        setStaffOptionsLoading(false);
+      }
+    };
+
+    void loadStaffOptions();
+  }, []);
 
   useEffect(() => {
     if (!formId) {
@@ -98,6 +121,9 @@ const FormEditor = () => {
         setShareSlug(form.share_slug ?? '');
         setRequiresAuth(form.requires_auth);
         setApiEnabled(form.api_enabled);
+        setNotifyOwner(Boolean(form.notification_settings?.notify_owner));
+        setNotifyStaff(Boolean(form.notification_settings?.notify_staff));
+        setStaffRecipientIds(form.notification_settings?.recipients.map((recipient) => recipient.staff_id) ?? []);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Failed to load form.');
         navigate('/forms', { replace: true });
@@ -155,6 +181,11 @@ const FormEditor = () => {
         share_slug: shareEnabled ? shareSlug || name : null,
         requires_auth: requiresAuth,
         api_enabled: apiEnabled,
+        notification_settings: {
+          notify_owner: notifyOwner,
+          notify_staff: notifyStaff,
+          staff_recipient_ids: staffRecipientIds,
+        },
       };
 
       const savedForm = formId
@@ -179,6 +210,18 @@ const FormEditor = () => {
       </AdminPageLayout>
     );
   }
+
+  const filteredStaffOptions = staffOptions.filter((option) => {
+    const query = staffSearch.trim().toLowerCase();
+    if (!query) return true;
+    return option.display_name.toLowerCase().includes(query) || (option.email ?? '').toLowerCase().includes(query);
+  });
+
+  const toggleStaffRecipient = (staffId: string, checked: boolean) => {
+    setStaffRecipientIds((current) => (
+      checked ? [...new Set([...current, staffId])] : current.filter((value) => value !== staffId)
+    ));
+  };
 
   return (
     <AdminPageLayout
@@ -265,6 +308,118 @@ const FormEditor = () => {
                     </p>
                   </div>
                   <Switch checked={requiresAuth} onCheckedChange={setRequiresAuth} />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border bg-gradient-to-br from-amber-50 via-white to-orange-50 p-5 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900">
+              <div className="mb-4 flex items-start gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-sm">
+                  <Bell className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold">
+                    {language === 'en' ? 'Submission notifications' : 'Benachrichtigungen bei Einreichungen'}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {language === 'en'
+                      ? 'Choose who receives e-mail alerts when this form is submitted.'
+                      : 'Lege fest, wer bei einer Einreichung dieses Formulars per E-Mail informiert wird.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
+                <div className="space-y-3 rounded-xl border bg-background/80 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <Label>{language === 'en' ? 'Notify form owner' : 'Formularbesitzer benachrichtigen'}</Label>
+                      <p className="text-xs text-muted-foreground">
+                        {language === 'en'
+                          ? 'Sends the alert to the owner account of this form.'
+                          : 'Sendet die Benachrichtigung an das Besitzerkonto dieses Formulars.'}
+                      </p>
+                    </div>
+                    <Switch checked={notifyOwner} onCheckedChange={setNotifyOwner} />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/40 p-3">
+                    <div>
+                      <Label>{language === 'en' ? 'Notify staff recipients' : 'Mitarbeiter benachrichtigen'}</Label>
+                      <p className="text-xs text-muted-foreground">
+                        {language === 'en'
+                          ? 'Use the recipient list to notify specific staff records.'
+                          : 'Verwende die Empfängerliste, um bestimmte Mitarbeiter-Einträge zu benachrichtigen.'}
+                      </p>
+                    </div>
+                    <Switch checked={notifyStaff} onCheckedChange={setNotifyStaff} />
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {notifyOwner && <Badge>{language === 'en' ? 'Owner enabled' : 'Besitzer aktiv'}</Badge>}
+                    {notifyStaff && <Badge variant="secondary">{staffRecipientIds.length} {language === 'en' ? 'staff selected' : 'Mitarbeiter ausgewählt'}</Badge>}
+                    {!notifyOwner && !notifyStaff && (
+                      <Badge variant="outline">{language === 'en' ? 'No e-mail notifications' : 'Keine E-Mail-Benachrichtigungen'}</Badge>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-xl border bg-background/80 p-4">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <Label htmlFor="staff-recipient-search">{language === 'en' ? 'Staff recipients' : 'Mitarbeiter-Empfänger'}</Label>
+                  </div>
+
+                  <Input
+                    id="staff-recipient-search"
+                    value={staffSearch}
+                    onChange={(event) => setStaffSearch(event.target.value)}
+                    placeholder={language === 'en' ? 'Search by name or e-mail' : 'Nach Name oder E-Mail suchen'}
+                    disabled={staffOptionsLoading}
+                  />
+
+                  <div className="max-h-72 space-y-2 overflow-y-auto rounded-xl border bg-muted/20 p-2">
+                    {staffOptionsLoading && (
+                      <div className="flex items-center gap-2 px-2 py-3 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {language === 'en' ? 'Loading staff...' : 'Lade Mitarbeiter...'}
+                      </div>
+                    )}
+
+                    {!staffOptionsLoading && filteredStaffOptions.length === 0 && (
+                      <p className="px-2 py-3 text-sm text-muted-foreground">
+                        {language === 'en' ? 'No matching staff found.' : 'Keine passenden Mitarbeiter gefunden.'}
+                      </p>
+                    )}
+
+                    {!staffOptionsLoading && filteredStaffOptions.map((option) => {
+                      const checked = staffRecipientIds.includes(option.id);
+                      return (
+                        <label
+                          key={option.id}
+                          className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${checked ? 'border-amber-300 bg-amber-50/80 dark:border-amber-800 dark:bg-amber-950/30' : 'bg-background hover:bg-muted/50'} ${!notifyStaff ? 'opacity-60' : ''}`}
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(value) => toggleStaffRecipient(option.id, Boolean(value))}
+                            disabled={!notifyStaff}
+                            className="mt-0.5"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-medium">{option.display_name}</span>
+                              {option.email && <Badge variant="outline">{option.email}</Badge>}
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {option.account_user_id
+                                ? (language === 'en' ? 'Linked to a user account.' : 'Mit einem Benutzerkonto verknüpft.')
+                                : (language === 'en' ? 'Standalone staff record.' : 'Eigenständiger Mitarbeiter-Eintrag.')}
+                            </p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>

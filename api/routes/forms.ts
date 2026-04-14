@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { createSupabaseClient, type Env } from '../lib/supabase';
+import { createSupabaseAdminClient, createSupabaseClient, type Env } from '../lib/supabase';
 
 const forms = new Hono<{ Bindings: Env }>();
 
@@ -28,6 +28,19 @@ interface FormRow {
   share_slug: string | null;
   requires_auth: boolean;
   api_enabled: boolean;
+  owner_user_id?: string | null;
+}
+
+interface NotificationRecipient {
+  email: string;
+  label: string;
+  kind: 'owner' | 'staff';
+  staffId?: string;
+  userId?: string;
+}
+
+interface MailDeliveryJobRow {
+  id: string;
 }
 
 const VALID_FIELD_TYPES = new Set<FormFieldType>([
@@ -43,6 +56,8 @@ const VALID_FIELD_TYPES = new Set<FormFieldType>([
   'date',
 ]);
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const parseBearerToken = (value: string | undefined): string | undefined => {
   if (!value) return undefined;
   const match = value.match(/^Bearer\s+(.+)$/i);
@@ -52,6 +67,252 @@ const parseBearerToken = (value: string | undefined): string | undefined => {
 const isPlainObject = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
+
+const isValidEmail = (value: string): boolean => EMAIL_PATTERN.test(value);
+
+const escapeHtml = (value: string): string => value
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#39;');
+
+const formatAnswerValue = (value: string | number | boolean | string[] | null): string => {
+  if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '-';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (value === null || value === '') return '-';
+  return String(value);
+};
+
+const buildAnswerSummaryText = (
+  fields: FormFieldDefinition[],
+  answers: Record<string, string | number | boolean | string[] | null>,
+): string => fields
+  .map((field) => `${field.label}: ${formatAnswerValue(answers[field.name] ?? null)}`)
+  .join('\n');
+
+const buildAnswerSummaryHtml = (
+  fields: FormFieldDefinition[],
+  answers: Record<string, string | number | boolean | string[] | null>,
+): string => fields
+  .map((field) => `<tr><td style="padding:8px 12px;border:1px solid #d9d9d9;font-weight:600;vertical-align:top;">${escapeHtml(field.label)}</td><td style="padding:8px 12px;border:1px solid #d9d9d9;">${escapeHtml(formatAnswerValue(answers[field.name] ?? null))}</td></tr>`)
+  .join('');
+
+const buildNotificationContent = (input: {
+  form: FormRow;
+  fields: FormFieldDefinition[];
+  answers: Record<string, string | number | boolean | string[] | null>;
+  answerId: string;
+  submittedVia: 'share' | 'api' | 'page';
+  sourceSlug: string | null;
+  recipientLabel: string;
+}): { subject: string; text: string; html: string } => {
+  const answerSummaryText = buildAnswerSummaryText(input.fields, input.answers);
+  const answerSummaryHtml = buildAnswerSummaryHtml(input.fields, input.answers);
+  const sourceLine = input.sourceSlug ? `Source: ${input.sourceSlug}` : 'Source: -';
+  const htmlSource = input.sourceSlug ? escapeHtml(input.sourceSlug) : '-';
+  const subject = `Neue Formularantwort: ${input.form.name}`;
+  const text = [
+    `Hallo ${input.recipientLabel},`,
+    '',
+    `fuer das Formular \"${input.form.name}\" wurde eine neue Antwort gespeichert.`,
+    '',
+    `Antwort-ID: ${input.answerId}`,
+    `Formular-Slug: ${input.form.slug}`,
+    `Eingangskanal: ${input.submittedVia}`,
+    sourceLine,
+    '',
+    'Antworten:',
+    answerSummaryText,
+  ].join('\n');
+  const html = [
+    '<div style="font-family:Arial,sans-serif;line-height:1.5;color:#1f2937;">',
+    `<p>Hallo ${escapeHtml(input.recipientLabel)},</p>`,
+    `<p>fuer das Formular <strong>${escapeHtml(input.form.name)}</strong> wurde eine neue Antwort gespeichert.</p>`,
+    '<table style="border-collapse:collapse;margin:16px 0;">',
+    `<tr><td style="padding:8px 12px;border:1px solid #d9d9d9;font-weight:600;">Antwort-ID</td><td style="padding:8px 12px;border:1px solid #d9d9d9;">${escapeHtml(input.answerId)}</td></tr>`,
+    `<tr><td style="padding:8px 12px;border:1px solid #d9d9d9;font-weight:600;">Formular-Slug</td><td style="padding:8px 12px;border:1px solid #d9d9d9;">${escapeHtml(input.form.slug)}</td></tr>`,
+    `<tr><td style="padding:8px 12px;border:1px solid #d9d9d9;font-weight:600;">Eingangskanal</td><td style="padding:8px 12px;border:1px solid #d9d9d9;">${escapeHtml(input.submittedVia)}</td></tr>`,
+    `<tr><td style="padding:8px 12px;border:1px solid #d9d9d9;font-weight:600;">Quelle</td><td style="padding:8px 12px;border:1px solid #d9d9d9;">${htmlSource}</td></tr>`,
+    '</table>',
+    '<table style="border-collapse:collapse;margin:16px 0;width:100%;max-width:720px;">',
+    '<thead><tr><th colspan="2" style="text-align:left;padding:8px 12px;border:1px solid #d9d9d9;background:#f3f4f6;">Antworten</th></tr></thead>',
+    `<tbody>${answerSummaryHtml}</tbody>`,
+    '</table>',
+    '</div>',
+  ].join('');
+
+  return { subject, text, html };
+};
+
+const resolveOwnerRecipient = async (
+  admin: Awaited<ReturnType<typeof createSupabaseAdminClient>>,
+  form: FormRow,
+): Promise<NotificationRecipient | null> => {
+  if (!form.owner_user_id) return null;
+
+  const [{ data: ownerUser, error: ownerUserError }, { data: ownerProfile, error: ownerProfileError }] = await Promise.all([
+    admin.auth.admin.getUserById(form.owner_user_id),
+    admin
+      .from('user_profile')
+      .select('Username')
+      .eq('user_id', form.owner_user_id)
+      .maybeSingle(),
+  ]);
+
+  if (ownerUserError) throw new Error(ownerUserError.message);
+  if (ownerProfileError) throw new Error(ownerProfileError.message);
+
+  const email = ownerUser.user?.email?.trim() ?? '';
+  if (!isValidEmail(email)) return null;
+
+  return {
+    email,
+    label: typeof ownerProfile?.Username === 'string' && ownerProfile.Username.trim() ? ownerProfile.Username.trim() : 'Form owner',
+    kind: 'owner',
+    userId: form.owner_user_id,
+  };
+};
+
+const resolveStaffRecipients = async (
+  admin: Awaited<ReturnType<typeof createSupabaseAdminClient>>,
+  formId: string,
+): Promise<NotificationRecipient[]> => {
+  const { data: recipientRows, error: recipientError } = await admin
+    .from('form_notification_recipients')
+    .select('staff_id')
+    .eq('form_id', formId);
+
+  if (recipientError) throw new Error(recipientError.message);
+
+  const staffIds = [...new Set((recipientRows ?? []).map((row) => row.staff_id as string).filter(Boolean))];
+  if (staffIds.length === 0) return [];
+
+  const { data: staffRows, error: staffError } = await admin
+    .from('staff')
+    .select('id, display_name, email')
+    .in('id', staffIds);
+
+  if (staffError) throw new Error(staffError.message);
+
+  return (staffRows ?? [])
+    .map((row) => {
+      const email = typeof row.email === 'string' ? row.email.trim() : '';
+      if (!isValidEmail(email)) return null;
+      return {
+        email,
+        label: typeof row.display_name === 'string' && row.display_name.trim() ? row.display_name.trim() : 'Staff',
+        kind: 'staff' as const,
+        staffId: row.id as string,
+      };
+    })
+    .filter((recipient): recipient is NotificationRecipient => recipient !== null);
+};
+
+const enqueueFormAnswerNotifications = async (input: {
+  env: Env;
+  form: FormRow;
+  fields: FormFieldDefinition[];
+  answers: Record<string, string | number | boolean | string[] | null>;
+  answerId: string;
+  submittedBy: string | null;
+  submittedVia: 'share' | 'api' | 'page';
+  sourceSlug: string | null;
+}): Promise<void> => {
+  const admin = await createSupabaseAdminClient(input.env);
+  const { data: settings, error: settingsError } = await admin
+    .from('form_notification_settings')
+    .select('notify_owner, notify_staff')
+    .eq('form_id', input.form.id)
+    .maybeSingle();
+
+  if (settingsError) throw new Error(settingsError.message);
+  if (!settings?.notify_owner && !settings?.notify_staff) return;
+
+  const recipientMap = new Map<string, NotificationRecipient>();
+
+  if (settings.notify_owner) {
+    const ownerRecipient = await resolveOwnerRecipient(admin, input.form);
+    if (ownerRecipient) recipientMap.set(ownerRecipient.email.toLowerCase(), ownerRecipient);
+  }
+
+  if (settings.notify_staff) {
+    const staffRecipients = await resolveStaffRecipients(admin, input.form.id);
+    for (const recipient of staffRecipients) {
+      recipientMap.set(recipient.email.toLowerCase(), recipient);
+    }
+  }
+
+  const recipients = [...recipientMap.values()];
+  if (recipients.length === 0) return;
+
+  const jobsToInsert = recipients.map((recipient) => {
+    const content = buildNotificationContent({
+      form: input.form,
+      fields: input.fields,
+      answers: input.answers,
+      answerId: input.answerId,
+      submittedVia: input.submittedVia,
+      sourceSlug: input.sourceSlug,
+      recipientLabel: recipient.label,
+    });
+
+    return {
+      event_type: 'form_answer_notification',
+      status: 'pending',
+      form_id: input.form.id,
+      answer_id: input.answerId,
+      recipient_email: recipient.email,
+      subject: content.subject,
+      payload: {
+        html: content.html,
+        text: content.text,
+        formName: input.form.name,
+        formSlug: input.form.slug,
+        answerId: input.answerId,
+        submittedVia: input.submittedVia,
+        sourceSlug: input.sourceSlug,
+        recipientKind: recipient.kind,
+        recipientLabel: recipient.label,
+        recipientStaffId: recipient.staffId ?? null,
+        recipientUserId: recipient.userId ?? null,
+      },
+      queued_by: input.submittedBy,
+    };
+  });
+
+  const { data: jobs, error: jobsError } = await admin
+    .from('mail_delivery_jobs')
+    .insert(jobsToInsert)
+    .select('id');
+
+  if (jobsError) throw new Error(jobsError.message);
+  if (!jobs || jobs.length === 0) return;
+
+  const { error: eventsError } = await admin
+    .from('mail_delivery_events')
+    .insert((jobs as MailDeliveryJobRow[]).map((job) => ({
+      job_id: job.id,
+      event_type: 'queued',
+      message: 'Queued form answer notification for delivery.',
+      metadata: {
+        formId: input.form.id,
+        answerId: input.answerId,
+      },
+    })));
+
+  if (eventsError) throw new Error(eventsError.message);
+
+  await Promise.allSettled((jobs as MailDeliveryJobRow[]).map(async (job) => {
+    const result = await admin.functions.invoke('send_email', {
+      body: { mode: 'deliver-job', jobId: job.id },
+    });
+
+    if (result.error) {
+      console.error(`Failed to invoke send_email for job ${job.id}: ${result.error.message}`);
+    }
+  }));
+};
 
 const normalizeSchema = (rawSchema: Record<string, unknown>): { fields: FormFieldDefinition[]; errors: string[] } => {
   const fields: FormFieldDefinition[] = [];
@@ -296,6 +557,7 @@ forms.post('/share/:shareSlug/answers', async (c) => {
     submittedBy = data.user?.id ?? null;
   }
 
+  const sourceSlug = typeof body.source_slug === 'string' ? body.source_slug : form.share_slug;
   const answerId = crypto.randomUUID();
   const { error } = await supabase
     .from('forms_answers')
@@ -304,7 +566,7 @@ forms.post('/share/:shareSlug/answers', async (c) => {
       form_id: form.id,
       submitted_by: submittedBy,
       answers: normalizedAnswers,
-      source_slug: typeof body.source_slug === 'string' ? body.source_slug : form.share_slug,
+      source_slug: sourceSlug,
       submitted_via: 'share',
       ip_address: c.req.header('cf-connecting-ip') ?? null,
       user_agent: c.req.header('user-agent') ?? null,
@@ -312,6 +574,22 @@ forms.post('/share/:shareSlug/answers', async (c) => {
     ;
 
   if (error) return c.json({ error: 'Failed to save answers.', detail: error.message }, 500);
+
+  try {
+    await enqueueFormAnswerNotifications({
+      env: c.env,
+      form,
+      fields,
+      answers: normalizedAnswers,
+      answerId,
+      submittedBy,
+      submittedVia: 'share',
+      sourceSlug,
+    });
+  } catch (notificationError) {
+    console.error(`Failed to queue form answer notifications for ${answerId}:`, notificationError);
+  }
+
   return c.json({ success: true, answer_id: answerId });
 });
 
@@ -355,6 +633,7 @@ forms.post('/:identifier/answers', async (c) => {
   }
 
   const submittedVia = body.submitted_via === 'page' ? 'page' : 'api';
+  const sourceSlug = typeof body.source_slug === 'string' ? body.source_slug : form.slug;
   const answerId = crypto.randomUUID();
   const { error } = await supabase
     .from('forms_answers')
@@ -363,7 +642,7 @@ forms.post('/:identifier/answers', async (c) => {
       form_id: form.id,
       submitted_by: submittedBy,
       answers: normalizedAnswers,
-      source_slug: typeof body.source_slug === 'string' ? body.source_slug : form.slug,
+      source_slug: sourceSlug,
       submitted_via: submittedVia,
       ip_address: c.req.header('cf-connecting-ip') ?? null,
       user_agent: c.req.header('user-agent') ?? null,
@@ -371,6 +650,22 @@ forms.post('/:identifier/answers', async (c) => {
     ;
 
   if (error) return c.json({ error: 'Failed to save answers.', detail: error.message }, 500);
+
+  try {
+    await enqueueFormAnswerNotifications({
+      env: c.env,
+      form,
+      fields,
+      answers: normalizedAnswers,
+      answerId,
+      submittedBy,
+      submittedVia,
+      sourceSlug,
+    });
+  } catch (notificationError) {
+    console.error(`Failed to queue form answer notifications for ${answerId}:`, notificationError);
+  }
+
   return c.json({ success: true, answer_id: answerId });
 });
 

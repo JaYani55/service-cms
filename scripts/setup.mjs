@@ -13,8 +13,9 @@
  *  6. Supabase + storage credentials (Worker secret, Secrets Store, wrangler.jsonc vars)
  *  6b. Write .env with VITE_ vars so Vite bakes them into the frontend bundle
  *  7. Apply database migrations via Supabase Management API
- *  8. Build             (npm run build  — consumes .env)
- *  9. Deploy            (wrangler deploy)
+ *  8. Sync Supabase Edge Function secrets + deploy functions/send_email
+ *  9. Build             (npm run build  — consumes .env)
+ * 10. Deploy            (wrangler deploy)
  */
 
 import {
@@ -32,7 +33,8 @@ import {
 } from '@clack/prompts';
 import { execSync, spawnSync } from 'child_process';
 import { randomBytes } from 'crypto';
-import { readFileSync, writeFileSync } from 'fs';
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import pc from 'picocolors';
@@ -456,7 +458,7 @@ async function stepSupabaseSecrets(storeId) {
   writeDevVarsFile(supabasePublishableKey, encryptionKey);
   dv.stop(pc.green('.dev.vars written ✓  (SUPABASE_PUBLISHABLE_KEY + SECRETS_ENCRYPTION_KEY)'));
 
-  return { supabaseUrl, supabaseSecretKey, storageProvider, storageBucket, r2PublicUrl };
+  return { supabaseUrl, supabaseSecretKey, storageProvider, storageBucket, r2PublicUrl, encryptionKey };
 }
 
 function patchWranglerJsonc(accountId, storeId) {
@@ -767,11 +769,65 @@ async function runSqlQuery(projectRef, pat, sql) {
   return res.json().catch(() => null);
 }
 
+async function promptForSupabasePat() {
+  note(
+    [
+      'The next setup steps use the Supabase Management API and CLI.',
+      'Create a personal access token (PAT) at:',
+      pc.cyan('  supabase.com/dashboard/account/tokens'),
+      '',
+      pc.bold('  ⚠️  Use a PAT — NOT your publishable or secret key.'),
+      pc.dim('  PATs start with  sb_pat_  or  sbp_  and are never stored by this setup script.'),
+    ].join('\n'),
+    'Supabase access token',
+  );
+
+  return bailOnCancel(
+    await password({
+      message: 'Supabase personal access token (input hidden):',
+      validate: (v) => {
+        const t = v.trim();
+        if (t.length < 10) return 'Token looks too short — paste the full token.';
+        if (!t.startsWith('sbp_') && !t.startsWith('sb_pat_')) {
+          return 'This does not look like a PAT (should start with sbp_ or sb_pat_). '
+            + 'Do not use your publishable or secret key here.';
+        }
+      },
+    }),
+  );
+}
+
+function runSupabaseCli(args, envOverrides = {}, options = {}) {
+  return spawnSync(
+    'npx',
+    ['-y', 'supabase', ...args],
+    {
+      cwd: options.cwd ?? ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: true,
+      env: { ...process.env, ...envOverrides },
+    },
+  );
+}
+
+function stageEdgeFunctionWorkdir(functionName) {
+  const deployRoot = mkdtempSync(join(tmpdir(), 'service-cms-supabase-'));
+  const supabaseRoot = join(deployRoot, 'supabase');
+  const stagedFunctionRoot = join(supabaseRoot, 'functions', functionName);
+
+  mkdirSync(stagedFunctionRoot, { recursive: true });
+  cpSync(join(ROOT, 'functions', 'config.toml'), join(supabaseRoot, 'config.toml'));
+  cpSync(join(ROOT, 'functions', functionName), stagedFunctionRoot, { recursive: true });
+
+  return deployRoot;
+}
+
 /**
  * Step: apply the SQL migration files in the correct dependency order.
  * Uses the Supabase Management API (requires a personal access token).
  */
-async function stepMigrations(supabaseUrl, serviceRoleKey, storageProvider, storageBucket) {
+async function stepMigrations(supabaseUrl, serviceRoleKey, storageProvider, storageBucket, projectRef, pat) {
   // ── 1. Check if schema is already present ──────────────────────────────
   const s = spinner();
   s.start('Checking if database schema already exists…');
@@ -796,35 +852,6 @@ async function stepMigrations(supabaseUrl, serviceRoleKey, storageProvider, stor
     log.info('No schema found — will apply all migrations.');
   }
 
-  // ── 2. Ask for Supabase personal access token ──────────────────────────
-  note(
-    [
-      'Migrations are applied via the Supabase Management API.',
-      'Create a personal access token (PAT) at:',
-      pc.cyan('  supabase.com/dashboard/account/tokens'),
-      '',
-      pc.bold('  ⚠️  Use a PAT — NOT your publishable or secret key.'),
-      pc.dim('  PATs start with  sb_pat_  or  sbp_  and are created in your account settings.'),
-      pc.dim('  The token is only used locally during setup and is never stored.'),
-    ].join('\n'),
-    'Supabase Management API token',
-  );
-
-  const pat = bailOnCancel(
-    await password({
-      message: 'Supabase personal access token (input hidden):',
-      validate: (v) => {
-        const t = v.trim();
-        if (t.length < 10) return 'Token looks too short \u2014 paste the full token.';
-        if (!t.startsWith('sbp_') && !t.startsWith('sb_pat_')) {
-          return 'This does not look like a PAT (should start with sbp_ or sb_pat_). '
-            + 'Do not use your publishable or secret key here.';
-        }
-      },
-    }),
-  );
-
-  const projectRef = extractProjectRef(supabaseUrl);
   if (!projectRef) {
     log.warn('Could not extract project ref from SUPABASE_URL — skipping migrations.');
     return;
@@ -878,6 +905,9 @@ async function stepMigrations(supabaseUrl, serviceRoleKey, storageProvider, stor
     'system_config.sql',
     'forms.sql',
     'forms_answers.sql',
+    'forms_notifications.sql',
+    'forms_notification_recipient_rls_fix.sql',
+    'mail_delivery.sql',
     'forms_published_default.sql',
     'plugins.sql',
     'plugins_config_schema.sql',
@@ -990,6 +1020,65 @@ async function stepMigrations(supabaseUrl, serviceRoleKey, storageProvider, stor
   }
 }
 
+async function stepEdgeFunctionDeployment(projectRef, pat, supabaseUrl, supabaseSecretKey, encryptionKey) {
+  if (!projectRef) {
+    log.warn('Could not extract project ref from SUPABASE_URL — skipping Supabase Edge Function deployment.');
+    return;
+  }
+
+  const stagedWorkdir = stageEdgeFunctionWorkdir('send_email');
+
+  try {
+
+  const syncSecrets = spinner();
+  syncSecrets.start('Syncing Supabase Edge Function secrets…');
+
+  const secretsResult = runSupabaseCli([
+    'secrets', 'set',
+    `APP_SUPABASE_SECRET_KEY=${supabaseSecretKey.trim()}`,
+    `SECRETS_ENCRYPTION_KEY=${encryptionKey.trim()}`,
+    '--project-ref', projectRef,
+    '--workdir', stagedWorkdir,
+  ], {
+    SUPABASE_ACCESS_TOKEN: pat.trim(),
+  }, {
+    cwd: stagedWorkdir,
+  });
+
+  if (secretsResult.status !== 0) {
+    const detail = (secretsResult.stderr || secretsResult.stdout || '').trim();
+    syncSecrets.stop(pc.red('Failed to sync Supabase Edge Function secrets.'));
+    throw new Error(detail || 'Supabase secrets set failed.');
+  }
+
+  syncSecrets.stop(pc.green('Supabase Edge Function secrets synced ✓'));
+
+  const deployFn = spinner();
+  deployFn.start('Deploying Supabase Edge Function send_email…');
+
+  const deployResult = runSupabaseCli([
+    'functions', 'deploy', 'send_email',
+    '--use-api',
+    '--project-ref', projectRef,
+    '--workdir', stagedWorkdir,
+  ], {
+    SUPABASE_ACCESS_TOKEN: pat.trim(),
+  }, {
+    cwd: stagedWorkdir,
+  });
+
+  if (deployResult.status !== 0) {
+    const detail = (deployResult.stderr || deployResult.stdout || '').trim();
+    deployFn.stop(pc.red('Failed to deploy Supabase Edge Function send_email.'));
+    throw new Error(detail || 'Supabase functions deploy failed.');
+  }
+
+  deployFn.stop(pc.green('Supabase Edge Function send_email deployed ✓'));
+  } finally {
+    rmSync(stagedWorkdir, { recursive: true, force: true });
+  }
+}
+
 async function stepBuild() {
   const go = bailOnCancel(
     await confirm({
@@ -1066,8 +1155,9 @@ async function main() {
       `  ${pc.cyan('4.')} Set ${pc.yellow('CF_API_TOKEN')} as a Worker secret`,
       `  ${pc.cyan('5.')} Supabase URL ${pc.dim('(var)')} + publishable key ${pc.dim('(Worker secret)')} + secret key ${pc.dim('(Secrets Store)')} + storage`,
       `  ${pc.cyan('6.')} Apply database migrations via Supabase Management API`,
-      `  ${pc.cyan('7.')} Register first super-admin user`,
-      `  ${pc.cyan('8.')} Build  →  Deploy`,
+      `  ${pc.cyan('7.')} Sync Supabase Edge Function secrets + deploy ${pc.yellow('send_email')}`,
+      `  ${pc.cyan('8.')} Register first super-admin user`,
+      `  ${pc.cyan('9.')} Build  →  Deploy`,
       '',
       pc.dim('You can re-run this wizard any time with  npm run setup'),
     ].join('\n'),
@@ -1113,7 +1203,7 @@ async function main() {
 
   // ── 6. Supabase + Storage credentials ────────────────────────────────────
   log.step(pc.bold('Step 5 — Supabase & storage credentials'));
-  const { supabaseUrl, supabaseSecretKey, storageProvider, storageBucket, r2PublicUrl } = await stepSupabaseSecrets(storeId);
+  const { supabaseUrl, supabaseSecretKey, storageProvider, storageBucket, r2PublicUrl, encryptionKey } = await stepSupabaseSecrets(storeId);
 
   // Patch wrangler.jsonc vars with Supabase + storage values
   const vs = spinner();
@@ -1121,20 +1211,27 @@ async function main() {
   patchWranglerVars(supabaseUrl, storageProvider, storageBucket, r2PublicUrl);
   vs.stop(pc.green('wrangler.jsonc vars updated ✓'));
 
+  const projectRef = extractProjectRef(supabaseUrl);
+  const supabasePat = await promptForSupabasePat();
+
   // ── 7. Database migrations ────────────────────────────────────────────────
   log.step(pc.bold('Step 6 — Database migrations'));
-  await stepMigrations(supabaseUrl, supabaseSecretKey, storageProvider, storageBucket);
+  await stepMigrations(supabaseUrl, supabaseSecretKey, storageProvider, storageBucket, projectRef, supabasePat);
 
-  // ── 8. First super-admin user ─────────────────────────────────────────────
-  log.step(pc.bold('Step 7 — First super-admin user'));
+  // ── 8. Supabase Edge Function deployment ─────────────────────────────────
+  log.step(pc.bold('Step 7 — Supabase Edge Function deployment'));
+  await stepEdgeFunctionDeployment(projectRef, supabasePat, supabaseUrl, supabaseSecretKey, encryptionKey);
+
+  // ── 9. First super-admin user ─────────────────────────────────────────────
+  log.step(pc.bold('Step 8 — First super-admin user'));
   await stepFirstAdmin(supabaseUrl, supabaseSecretKey);
 
-  // ── 9. Build ──────────────────────────────────────────────────────────────
-  log.step(pc.bold('Step 8 — Build'));
+  // ── 10. Build ─────────────────────────────────────────────────────────────
+  log.step(pc.bold('Step 9 — Build'));
   await stepBuild();
 
-  // ── 10. Deploy ────────────────────────────────────────────────────────────
-  log.step(pc.bold('Step 9 — Deploy'));
+  // ── 11. Deploy ────────────────────────────────────────────────────────────
+  log.step(pc.bold('Step 10 — Deploy'));
   await stepDeploy();
 
   // ── Done ──────────────────────────────────────────────────────────────────
@@ -1142,7 +1239,7 @@ async function main() {
     [
       pc.green(pc.bold('Setup complete!')),
       '',
-      'All secrets have been stored in the Secrets Store.',
+      'Cloudflare runtime secrets and Supabase Edge Function secrets have been synced.',
       `You can update them any time via ${pc.cyan('/verwaltung/connections')} in your app.`,
     ].join('\n'),
   );

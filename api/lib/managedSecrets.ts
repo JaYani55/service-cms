@@ -1,6 +1,7 @@
 import { createSupabaseAdminClient, type Env } from './supabase';
 
 const REVALIDATION_SECRET_NAMESPACE = 'page-revalidation';
+const MAIL_SECRET_NAMESPACE = 'mail';
 
 type ManagedSecretMetadata = Record<string, unknown>;
 
@@ -62,6 +63,14 @@ function requireEncryptionSecret(env: Env): string {
 
 export function buildRevalidationSecretName(schemaId: string): string {
   return `REVALIDATION_${schemaId.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`;
+}
+
+export function buildMailSecretName(kind: 'smtp-password' | 'resend-api-key'): string {
+  if (kind === 'smtp-password') {
+    return 'MAIL_SMTP_PASSWORD';
+  }
+
+  return 'MAIL_RESEND_API_KEY';
 }
 
 export async function upsertManagedSecret(env: Env, input: {
@@ -134,4 +143,8 @@ export async function deleteManagedSecret(env: Env, name: string): Promise<void>
 
 export function getRevalidationSecretNamespace(): string {
   return REVALIDATION_SECRET_NAMESPACE;
+}
+
+export function getMailSecretNamespace(): string {
+  return MAIL_SECRET_NAMESPACE;
 }

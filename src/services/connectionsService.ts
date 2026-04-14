@@ -91,6 +91,22 @@ export interface StorageConfigSettings {
   r2PublicUrl: string;
 }
 
+export interface MailConfigSettings {
+  provider: 'smtp' | 'resend' | '';
+  fromName: string;
+  fromEmail: string;
+  replyToEmail: string;
+  smtpHost: string;
+  smtpPort: number;
+  smtpSecure: boolean;
+  smtpUsername: string;
+}
+
+export interface MailSecretStatus {
+  smtpPasswordConfigured: boolean;
+  resendApiKeyConfigured: boolean;
+}
+
 // ── API calls ────────────────────────────────────────────────────────────────
 
 export interface EnvStatusEntry {
@@ -161,6 +177,85 @@ export async function updateStorageConfigSettings(input: StorageConfigSettings):
     const err = await res.json().catch(() => ({ error: 'Unknown error' })) as ErrorResponse;
     throw new Error(err.error ?? `HTTP ${res.status}`);
   }
+}
+
+const normalizeMailConfig = (mail: Partial<MailConfigSettings>): MailConfigSettings => ({
+  provider: mail.provider === 'smtp' || mail.provider === 'resend' ? mail.provider : '',
+  fromName: mail.fromName ?? '',
+  fromEmail: mail.fromEmail ?? '',
+  replyToEmail: mail.replyToEmail ?? '',
+  smtpHost: mail.smtpHost ?? '',
+  smtpPort: typeof mail.smtpPort === 'number' ? mail.smtpPort : 587,
+  smtpSecure: Boolean(mail.smtpSecure),
+  smtpUsername: mail.smtpUsername ?? '',
+});
+
+export async function getMailConfigSettings(): Promise<{ mail: MailConfigSettings; secrets: MailSecretStatus }> {
+  const res = await fetch(`${API_URL}/api/config/mail`, {
+    headers: await createAuthenticatedHeaders({ Accept: 'application/json' }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' })) as ErrorResponse;
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+
+  const data = await res.json() as { mail: Partial<MailConfigSettings>; secrets: Partial<MailSecretStatus> };
+  return {
+    mail: normalizeMailConfig(data.mail ?? {}),
+    secrets: {
+      smtpPasswordConfigured: Boolean(data.secrets?.smtpPasswordConfigured),
+      resendApiKeyConfigured: Boolean(data.secrets?.resendApiKeyConfigured),
+    },
+  };
+}
+
+export async function updateMailConfigSettings(input: MailConfigSettings & { smtpPassword?: string; resendApiKey?: string }): Promise<{ mail: MailConfigSettings; secrets: MailSecretStatus }> {
+  const res = await fetch(`${API_URL}/api/config/mail`, {
+    method: 'PUT',
+    headers: await createAuthenticatedHeaders({
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    }),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' })) as ErrorResponse;
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+
+  const data = await res.json() as { mail: Partial<MailConfigSettings>; secrets: Partial<MailSecretStatus> };
+  return {
+    mail: normalizeMailConfig(data.mail ?? {}),
+    secrets: {
+      smtpPasswordConfigured: Boolean(data.secrets?.smtpPasswordConfigured),
+      resendApiKeyConfigured: Boolean(data.secrets?.resendApiKeyConfigured),
+    },
+  };
+}
+
+export async function testMailConnection(): Promise<{ success: boolean; provider: 'smtp' | 'resend'; detail?: string; response?: Record<string, unknown> }> {
+  const res = await fetch(`${API_URL}/api/config/mail/test`, {
+    method: 'POST',
+    headers: await createAuthenticatedHeaders({ Accept: 'application/json' }),
+  });
+  const data = await res.json().catch(() => ({})) as {
+    success?: boolean;
+    provider?: 'smtp' | 'resend';
+    detail?: string;
+    response?: Record<string, unknown>;
+    error?: string;
+  };
+
+  if (!res.ok) {
+    throw new Error(data.error ?? `HTTP ${res.status}`);
+  }
+
+  return {
+    success: Boolean(data.success),
+    provider: data.provider ?? 'smtp',
+    detail: data.detail,
+    response: data.response,
+  };
 }
 
 export async function listStores(): Promise<CfStore[]> {
