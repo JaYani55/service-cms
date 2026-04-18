@@ -15,10 +15,10 @@ import {
   normalizeSchemaIntegrationRequirements,
   validateSlugStructure,
 } from '../lib/schemaRouting';
+import { getOptionalAuthSession } from '../lib/auth';
 import {
   getDiscoverableSpecBySlug,
-  listDiscoverableSpecs,
-  listMcpExposedDiscoverableSpecs,
+  listRegistryMcpSpecs,
   type DiscoverableSpecSummary,
 } from '../lib/specRegistry';
 
@@ -71,7 +71,7 @@ function buildSpecToolPayload(spec: DiscoverableSpecSummary, baseUrl: string) {
 // Creates a fresh McpServer instance with all tools registered.
 // We need a factory because each connection needs its own server + transport.
 
-async function createMcpServerWithTools(env: Env, baseUrl: string) {
+async function createMcpServerWithTools(env: Env, baseUrl: string, includeClosed: boolean) {
   const server = new McpServer({
     name: 'specy',
     version: '1.0.0',
@@ -82,10 +82,10 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
   // ── Tool: list_schemas ──────────────────────────────────────────────────
   server.tool(
     'list_available_tools',
-    'List all published public specs attached to registered schemas. This is the unified discovery surface for agent-readable tools.',
+    'List all published MCP entries visible to the current caller. Public entries are always listed. Closed entries require a valid Supabase JWT.',
     {},
     async () => {
-      const specs = await listDiscoverableSpecs(env);
+      const specs = await listRegistryMcpSpecs(env, { includeClosed });
 
       return {
         content: [{
@@ -96,6 +96,7 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
               name: spec.name,
               description: spec.description,
               discovery_scope: spec.discovery_scope,
+              access_scope: spec.access_scope,
               schema: spec.schema,
               is_main: spec.is_main,
               detail_url: `${baseUrl}/api/specs/${spec.slug}`,
@@ -109,10 +110,10 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
 
   server.tool(
     'get_spec_definition',
-    'Get the full JSON definition for a discoverable spec by slug.',
+    'Get the full JSON definition for a published MCP entry by slug. Closed entries require a valid Supabase JWT.',
     { slug: z.string().describe('The spec slug to resolve') },
     async ({ slug }) => {
-      const spec = await getDiscoverableSpecBySlug(env, slug);
+      const spec = await getDiscoverableSpecBySlug(env, slug, { includeClosed });
 
       if (!spec) {
         return { content: [{ type: 'text' as const, text: `Spec "${slug}" not found.` }] };
@@ -403,7 +404,7 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
     },
   );
 
-  const exposedSpecs = await listMcpExposedDiscoverableSpecs(env);
+  const exposedSpecs = await listRegistryMcpSpecs(env, { includeClosed });
   const registeredToolNames = new Set<string>(BUILT_IN_MCP_TOOLS);
 
   exposedSpecs.forEach((spec) => {
@@ -428,17 +429,18 @@ async function createMcpServerWithTools(env: Env, baseUrl: string) {
   return server;
 }
 
-// ─── MCP HTTP Transport ─────────────────────────────────────────────────────
-
-let mcpServer: McpServer | null = null;
-let transport: StreamableHTTPTransport | null = null;
-
 mcpRoute.all('/', async (c) => {
   const baseUrl = new URL(c.req.url).origin;
+  const authSession = await getOptionalAuthSession(c);
+  if (authSession instanceof Response) {
+    return authSession;
+  }
+
+  const includeClosed = Boolean(authSession?.token);
 
   // Browsers/REST clients hitting GET /mcp without SSE headers
   if (c.req.method === 'GET' && !c.req.header('accept')?.includes('text/event-stream')) {
-    const exposedSpecs = await listMcpExposedDiscoverableSpecs(c.env);
+    const exposedSpecs = await listRegistryMcpSpecs(c.env, { includeClosed });
     const toolNames = Array.from(new Set([
       ...BUILT_IN_MCP_TOOLS,
       ...exposedSpecs.map((spec) => spec.slug),
@@ -453,7 +455,7 @@ mcpRoute.all('/', async (c) => {
       endpoint: `${baseUrl}/mcp`,
       discovery_url: `${baseUrl}/.well-known/mcp.json`,
       status: 'active',
-      description: 'This is the Specy MCP endpoint. Connect using an MCP-compatible client over Streamable HTTP and initialize against this URL.',
+      description: 'This is the Specy MCP endpoint. Published public MCP entries are visible without auth. Closed MCP entries require a valid Supabase JWT in the Authorization header.',
       methods: {
         post: 'Send JSON-RPC MCP requests to this endpoint.',
         get: 'Open an optional SSE stream or fetch this discovery payload.',
@@ -462,14 +464,9 @@ mcpRoute.all('/', async (c) => {
     });
   }
 
-  if (!transport) {
-    transport = new StreamableHTTPTransport();
-  }
-
-  if (!mcpServer || !mcpServer.isConnected()) {
-    mcpServer = await createMcpServerWithTools(c.env, baseUrl);
-    await mcpServer.connect(transport);
-  }
+  const transport = new StreamableHTTPTransport();
+  const mcpServer = await createMcpServerWithTools(c.env, baseUrl, includeClosed);
+  await mcpServer.connect(transport);
 
   return transport.handleRequest(c);
 });

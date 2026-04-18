@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -92,6 +92,11 @@ const RootRoute = () => {
   }
   
   return <Navigate to="/events" replace />;
+};
+
+const LegacySpecDetailRedirect = () => {
+  const { specSlug } = useParams<{ specSlug: string }>();
+  return <Navigate to={specSlug ? `/mcp/${specSlug}` : '/mcp'} replace />;
 };
 
 // Add this component to update document language
@@ -227,9 +232,12 @@ const AppContent = () => {
           <Route path="/forms/new" element={<ProtectedRoute requiredRole="user"><FormEditor /></ProtectedRoute>} />
           <Route path="/forms/:formId" element={<ProtectedRoute requiredRole="user"><FormEditor /></ProtectedRoute>} />
           <Route path="/forms/:formId/answers" element={<ProtectedRoute requiredRole="user"><FormAnswers /></ProtectedRoute>} />
-          <Route path="/specs" element={<ProtectedRoute requiredRole="user"><Specs /></ProtectedRoute>} />
-          <Route path="/specs/new" element={<ProtectedRoute requiredRole="user"><SpecEditor /></ProtectedRoute>} />
-          <Route path="/specs/:specSlug" element={<ProtectedRoute requiredRole="user"><SpecEditor /></ProtectedRoute>} />
+          <Route path="/mcp" element={<ProtectedRoute requiredRole="user"><Specs /></ProtectedRoute>} />
+          <Route path="/mcp/new" element={<ProtectedRoute requiredRole="user"><SpecEditor /></ProtectedRoute>} />
+          <Route path="/mcp/:specSlug" element={<ProtectedRoute requiredRole="user"><SpecEditor /></ProtectedRoute>} />
+          <Route path="/specs" element={<Navigate to="/mcp" replace />} />
+          <Route path="/specs/new" element={<Navigate to="/mcp/new" replace />} />
+          <Route path="/specs/:specSlug" element={<LegacySpecDetailRedirect />} />
 
           {/* Admin Routes */}
           <Route path="/admin" element={<ProtectedRoute requiredRole="user"><Verwaltung /></ProtectedRoute>} />

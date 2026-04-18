@@ -245,7 +245,7 @@ Server-side domain health check. Returns `{ status: 'online' | 'offline', latenc
 Triggers ISR revalidation on the registered frontend. The CMS calls this automatically after a page is saved when the schema is registered.
 
 ### `/mcp`
-MCP-compatible endpoint exposing 4 tools: `list_schemas`, `get_schema_spec`, `register_frontend`, `check_health`.
+MCP-compatible endpoint exposing built-in schema tools plus dynamic MCP entries from the MCP registry. Published public entries are visible without auth. Published closed entries require a valid Supabase auth JWT.
 
 ### `GET /api/forms`
 Returns the published forms index for CMS and agent use.

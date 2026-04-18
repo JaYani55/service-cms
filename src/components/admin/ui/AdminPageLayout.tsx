@@ -9,6 +9,7 @@ interface AdminPageLayoutProps {
   actions?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  containerClassName?: string;
 }
 
 export const AdminPageLayout: React.FC<AdminPageLayoutProps> = ({
@@ -17,15 +18,16 @@ export const AdminPageLayout: React.FC<AdminPageLayoutProps> = ({
   icon: Icon,
   actions,
   children,
-  className
+  className,
+  containerClassName,
 }) => {
   return (
     <div className={cn('min-h-screen bg-gray-50 dark:bg-gray-900', className)}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className={cn('mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8', containerClassName)}>
         {/* Consistent Header */}
         <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="flex items-start gap-4">
               {Icon && (
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-r from-gray-800 to-gray-900 dark:from-gray-700 dark:to-gray-800 flex items-center justify-center shadow-lg">
                   <Icon className="h-8 w-8 text-white" />
@@ -43,7 +45,7 @@ export const AdminPageLayout: React.FC<AdminPageLayoutProps> = ({
               </div>
             </div>
             {actions && (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3 xl:justify-end">
                 {actions}
               </div>
             )}

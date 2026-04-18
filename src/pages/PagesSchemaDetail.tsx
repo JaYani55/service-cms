@@ -425,11 +425,11 @@ const PagesSchemaDetail: React.FC = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>{language === 'en' ? 'Specs & Tool Exposure' : 'Specs & Tool-Freigabe'}</CardTitle>
+          <CardTitle>{language === 'en' ? 'MCP & Tool Exposure' : 'MCP & Tool-Freigabe'}</CardTitle>
           <CardDescription>
             {language === 'en'
-              ? 'These specs are currently attached to this schema and will be surfaced to agents through REST discovery and MCP when the schema is registered.'
-              : 'Diese Specs sind aktuell an dieses Schema angehängt und werden Agenten über REST-Discovery und MCP bereitgestellt, sobald das Schema registriert ist.'}
+              ? 'These MCP entries are currently attached to this schema and will be surfaced to agents through REST discovery and MCP when the schema is registered.'
+              : 'Diese MCP-Einträge sind aktuell an dieses Schema angehängt und werden Agenten über REST-Discovery und MCP bereitgestellt, sobald das Schema registriert ist.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -450,7 +450,7 @@ const PagesSchemaDetail: React.FC = () => {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              {language === 'en' ? 'No main spec attached yet.' : 'Noch keine Haupt-Spec angehängt.'}
+              {language === 'en' ? 'No main MCP attached yet.' : 'Noch kein Haupt-MCP angehängt.'}
             </p>
           )}
 
@@ -472,7 +472,7 @@ const PagesSchemaDetail: React.FC = () => {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              {language === 'en' ? 'No additional specs are attached.' : 'Keine zusätzlichen Specs angehängt.'}
+              {language === 'en' ? 'No additional MCP entries are attached.' : 'Keine zusätzlichen MCP-Einträge angehängt.'}
             </p>
           )}
 

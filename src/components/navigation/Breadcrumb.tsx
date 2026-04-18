@@ -70,10 +70,10 @@ const Breadcrumb: React.FC = () => {
       label: { en: 'New Form', de: 'Neues Formular' },
       parent: '/forms'
     },
-    '/specs': { label: { en: 'Specs', de: 'Specs' } },
-    '/specs/new': {
+    '/mcp': { label: { en: 'MCP', de: 'MCP' } },
+    '/mcp/new': {
       label: { en: 'New Spec', de: 'Neue Spec' },
-      parent: '/specs'
+      parent: '/mcp'
     },
     '/plugins': { label: { en: 'Plugins', de: 'Plugins' } },
   };
@@ -150,11 +150,11 @@ const Breadcrumb: React.FC = () => {
               isActive: true,
             });
           }
-        } else if (currentPath.startsWith('/specs/')) {
+        } else if (currentPath.startsWith('/mcp/')) {
           const segments = currentPath.split('/');
           if (segments.length === 3) {
             breadcrumbs.push({
-              label: language === 'en' ? 'Spec Details' : 'Spec-Details',
+              label: language === 'en' ? 'MCP Details' : 'MCP-Details',
               path: currentPath,
               isActive: i === pathnames.length - 1,
             });

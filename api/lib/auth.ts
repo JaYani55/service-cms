@@ -64,3 +64,24 @@ export async function requireAppRole(
 
   return { token, roles };
 }
+
+export async function getOptionalAuthSession(
+  c: Context<{ Bindings: Env }>,
+): Promise<{ token: string; roles: string[] } | null | Response> {
+  const token = parseBearerToken(c.req.header('Authorization'));
+  if (!token) {
+    return null;
+  }
+
+  const supabase = await createSupabaseClient(c.env, token);
+  const { data, error } = await supabase.auth.getUser(token);
+
+  if (error || !data.user) {
+    return c.json({ error: 'Invalid or expired session.' }, 401);
+  }
+
+  const payload = decodeJwtPayload(token);
+  const roles = normalizeRoles(payload?.user_roles);
+
+  return { token, roles };
+}

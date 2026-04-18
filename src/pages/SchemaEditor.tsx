@@ -764,7 +764,7 @@ const SchemaEditor: React.FC = () => {
     }
 
     if (!selectedMainSpecId) {
-      toast.error(language === 'en' ? 'Select a main spec first.' : 'Bitte zuerst eine Haupt-Spec auswählen.');
+      toast.error(language === 'en' ? 'Select a main MCP first.' : 'Bitte zuerst ein Haupt-MCP auswählen.');
       return;
     }
 
@@ -777,7 +777,7 @@ const SchemaEditor: React.FC = () => {
       setSchemaSpecBundle(bundle);
       setSelectedMainSpecId(bundle.main_spec?.id ?? selectedMainSpecId);
       setSelectedAdditionalSpecIds(bundle.attached_specs.filter((spec) => !spec.is_main).map((spec) => spec.id));
-      toast.success(language === 'en' ? 'Spec exposure updated' : 'Spec-Freigabe aktualisiert');
+      toast.success(language === 'en' ? 'MCP exposure updated' : 'MCP-Freigabe aktualisiert');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save schema specs');
     } finally {
@@ -1348,12 +1348,12 @@ const SchemaEditor: React.FC = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <span>🧰</span>
-            <span>{language === 'en' ? 'Spec Registry & Tool Exposure' : 'Spec-Registry & Tool-Freigabe'}</span>
+            <span>{language === 'en' ? 'MCP Registry & Tool Exposure' : 'MCP-Registry & Tool-Freigabe'}</span>
           </CardTitle>
           <CardDescription>
             {language === 'en'
-              ? 'Select the main spec for this schema and toggle additional published/private specs that should be available to agents via REST and MCP.'
-              : 'Wähle die Haupt-Spec für dieses Schema und aktiviere zusätzliche veröffentlichte/private Specs, die Agenten über REST und MCP zur Verfügung stehen sollen.'}
+              ? 'Select the main MCP for this schema and toggle additional published public or closed MCP entries that should be available to agents via REST and MCP.'
+              : 'Wähle das Haupt-MCP für dieses Schema und aktiviere zusätzliche veröffentlichte öffentliche oder geschlossene MCP-Einträge, die Agenten über REST und MCP zur Verfügung stehen sollen.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1364,7 +1364,7 @@ const SchemaEditor: React.FC = () => {
               <AlertDescription>
                 {language === 'en'
                   ? 'Saving a new schema automatically generates a draft main spec, which you can then replace or extend here.'
-                  : 'Beim Speichern eines neuen Schemas wird automatisch eine Entwurfs-Haupt-Spec erzeugt, die du anschließend hier ersetzen oder erweitern kannst.'}
+                  : 'Beim Speichern eines neuen Schemas wird automatisch ein Entwurfs-Haupt-MCP erzeugt, das du anschließend hier ersetzen oder erweitern kannst.'}
               </AlertDescription>
             </Alert>
           ) : isLoadingSpecs ? (
@@ -1386,7 +1386,7 @@ const SchemaEditor: React.FC = () => {
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={language === 'en' ? 'Select the main spec...' : 'Haupt-Spec auswählen...'} />
+                      <SelectValue placeholder={language === 'en' ? 'Select the main MCP...' : 'Haupt-MCP auswählen...'} />
                     </SelectTrigger>
                     <SelectContent>
                       {availableSpecs.map((spec) => (
@@ -1405,7 +1405,7 @@ const SchemaEditor: React.FC = () => {
                   <p className="text-sm text-muted-foreground">
                     {schemaSpecBundle?.main_spec
                       ? `${schemaSpecBundle.main_spec.name} (${schemaSpecBundle.main_spec.slug})`
-                      : (language === 'en' ? 'No main spec attached yet.' : 'Noch keine Haupt-Spec angehängt.')}
+                      : (language === 'en' ? 'No main MCP attached yet.' : 'Noch kein Haupt-MCP angehängt.')}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {(schemaSpecBundle?.attached_specs ?? []).map((spec) => (
@@ -1420,16 +1420,16 @@ const SchemaEditor: React.FC = () => {
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <Label className="text-base font-semibold">
-                    {language === 'en' ? 'Additional Specs' : 'Zusätzliche Specs'}
+                    {language === 'en' ? 'Additional MCP Entries' : 'Zusätzliche MCP-Einträge'}
                   </Label>
                   <div className="flex gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => navigate('/specs/new')}>
+                    <Button type="button" variant="outline" size="sm" onClick={() => navigate('/mcp/new')}>
                       <FileJson className="h-4 w-4 mr-2" />
-                      {language === 'en' ? 'New Spec' : 'Neue Spec'}
+                      {language === 'en' ? 'New MCP' : 'Neues MCP'}
                     </Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => navigate('/specs')}>
+                    <Button type="button" variant="outline" size="sm" onClick={() => navigate('/mcp')}>
                       <Eye className="h-4 w-4 mr-2" />
-                      {language === 'en' ? 'Open Registry' : 'Registry öffnen'}
+                      {language === 'en' ? 'Open MCP' : 'MCP öffnen'}
                     </Button>
                   </div>
                 </div>

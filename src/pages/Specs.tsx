@@ -36,7 +36,7 @@ const Specs = () => {
       setIsLoading(true);
       setSpecs(await getSpecs());
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load specs.');
+      toast.error(error instanceof Error ? error.message : 'Failed to load MCP entries.');
     } finally {
       setIsLoading(false);
     }
@@ -82,8 +82,8 @@ const Specs = () => {
   const handleDelete = async (spec: SpecRecord) => {
     const confirmed = window.confirm(
       language === 'en'
-        ? `Delete spec "${spec.name}" permanently?`
-        : `Spec „${spec.name}" dauerhaft löschen?`
+        ? `Delete MCP "${spec.name}" permanently?`
+        : `MCP „${spec.name}" dauerhaft löschen?`
     );
 
     if (!confirmed) {
@@ -92,7 +92,7 @@ const Specs = () => {
 
     try {
       await deleteSpec(spec.id);
-      toast.success(language === 'en' ? 'Spec deleted.' : 'Spec gelöscht.');
+      toast.success(language === 'en' ? 'MCP deleted.' : 'MCP gelöscht.');
       await loadSpecs();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to delete spec.');
@@ -116,17 +116,17 @@ const Specs = () => {
         <Bot className="h-12 w-12 text-muted-foreground" />
         <div className="space-y-2">
           <h2 className="text-xl font-semibold">
-            {language === 'en' ? 'No specs yet' : 'Noch keine Specs'}
+            {language === 'en' ? 'No MCP entries yet' : 'Noch keine MCP-Einträge'}
           </h2>
           <p className="max-w-xl text-sm text-muted-foreground">
             {language === 'en'
-              ? 'Create reusable agent-readable specs and attach them to page schemas as discoverable MCP tools.'
-              : 'Erstelle wiederverwendbare agentenlesbare Specs und hänge sie an Seitenschemata als discoverable MCP-Tools an.'}
+              ? 'Create reusable MCP entries. Published public entries are visible without auth. Published closed entries require a valid Supabase JWT.'
+              : 'Erstelle wiederverwendbare MCP-Einträge. Veröffentlichte öffentliche Einträge sind ohne Auth sichtbar. Veröffentlichte geschlossene Einträge erfordern ein gültiges Supabase-JWT.'}
           </p>
         </div>
-        <Button onClick={() => navigate('/specs/new')}>
+        <Button onClick={() => navigate('/mcp/new')}>
           <FilePlus2 className="mr-2 h-4 w-4" />
-          {language === 'en' ? 'Create spec' : 'Spec erstellen'}
+          {language === 'en' ? 'Create MCP' : 'MCP erstellen'}
         </Button>
       </div>
     </AdminCard>
@@ -134,17 +134,17 @@ const Specs = () => {
 
   return (
     <AdminPageLayout
-      title={language === 'en' ? 'Specs' : 'Specs'}
+      title="MCP"
       description={language === 'en'
-        ? 'Manage the shared repository of agent-readable tool specifications used by schemas, REST discovery, and MCP.'
-        : 'Verwalte das gemeinsame Repository agentenlesbarer Tool-Spezifikationen für Schemas, REST-Discovery und MCP.'}
+        ? 'Manage published and draft MCP entries. Public entries are visible without auth, closed entries require a valid Supabase JWT.'
+        : 'Verwalte veröffentlichte und Entwurfs-MCP-Einträge. Öffentliche Einträge sind ohne Auth sichtbar, geschlossene Einträge erfordern ein gültiges Supabase-JWT.'}
       icon={Bot}
       actions={(
         <div className="flex items-center gap-2">
           <Badge variant="outline">{filteredSpecs.length} / {specs.length}</Badge>
-          <Button onClick={() => navigate('/specs/new')}>
+          <Button onClick={() => navigate('/mcp/new')}>
             <FilePlus2 className="mr-2 h-4 w-4" />
-            {language === 'en' ? 'New Spec' : 'Neue Spec'}
+            {language === 'en' ? 'New MCP' : 'Neues MCP'}
           </Button>
         </div>
       )}
@@ -229,7 +229,7 @@ const Specs = () => {
               <SelectContent>
                 <SelectItem value="all">{language === 'en' ? 'All' : 'Alle'}</SelectItem>
                 <SelectItem value="public">{language === 'en' ? 'Public' : 'Öffentlich'}</SelectItem>
-                <SelectItem value="private">{language === 'en' ? 'Private' : 'Privat'}</SelectItem>
+                <SelectItem value="private">{language === 'en' ? 'Closed' : 'Geschlossen'}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -259,7 +259,7 @@ const Specs = () => {
 
                 <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                   <Badge variant="outline">/{spec.slug}</Badge>
-                  <Badge variant="outline">{spec.is_public ? (language === 'en' ? 'Public' : 'Öffentlich') : (language === 'en' ? 'Private' : 'Privat')}</Badge>
+                  <Badge variant="outline">{spec.is_public ? (language === 'en' ? 'Public' : 'Öffentlich') : (language === 'en' ? 'Closed' : 'Geschlossen')}</Badge>
                   {spec.is_main_template && <Badge variant="outline">{language === 'en' ? 'Template' : 'Vorlage'}</Badge>}
                   <Badge variant="outline">{Object.keys(spec.definition || {}).length} keys</Badge>
                 </div>
@@ -288,9 +288,9 @@ const Specs = () => {
 
                 <div className="flex flex-wrap gap-2">
                   <Button asChild variant="outline" size="sm">
-                    <Link to={`/specs/${spec.slug}`}>
+                    <Link to={`/mcp/${spec.slug}`}>
                       <Pencil className="mr-2 h-4 w-4" />
-                      {language === 'en' ? 'Edit' : 'Bearbeiten'}
+                      {language === 'en' ? 'Edit MCP' : 'MCP bearbeiten'}
                     </Link>
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => void handleArchiveToggle(spec)}>

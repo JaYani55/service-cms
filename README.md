@@ -71,6 +71,14 @@ The API provides two main entry points for automation:
 1. **REST Discovery**: `http://localhost:8787/api/schemas` lists all available page schemas and their specifications.
 2. **MCP Endpoint**: `http://localhost:8787/mcp` provides a Model Context Protocol interface for AI agents (like Claude Desktop) to discover, read, and register schemas automatically.
 
+The CMS also includes an MCP registry in the admin UI at `/mcp`.
+
+- MCP entries use `draft` and `published` status.
+- MCP entries use `public` and `closed` access.
+- Published public MCP entries are visible without authentication.
+- Published closed MCP entries require a valid Supabase auth JWT in the `Authorization: Bearer <token>` header.
+- Draft MCP entries remain editor-only and are not registered into the public MCP tool list.
+
 In production, Cloudflare static assets are configured with selective worker-first routing for `/api/*`, `/mcp`, `/mcp/*`, and `/.well-known/*`. This keeps the SPA asset-first for normal frontend requests while guaranteeing that API and MCP discovery endpoints always reach the Worker.
 
 ## Production

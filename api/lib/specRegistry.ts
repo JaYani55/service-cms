@@ -55,7 +55,8 @@ export interface DiscoverableSpecSummary extends SchemaSpecSummary {
     registration_status: string | null;
     frontend_url: string | null;
   } | null;
-  discovery_scope: 'schema' | 'global';
+  discovery_scope: 'mcp-registry' | 'schema';
+  access_scope: 'public' | 'closed';
 }
 
 export interface SchemaSpecBundle {
@@ -114,12 +115,6 @@ function mapSpecRow(row: Record<string, unknown>): LlmSpecRow {
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
-}
-
-function isGlobalDiscoverableSpec(spec: LlmSpecRow): boolean {
-  return spec.status === 'published'
-    && spec.is_public
-    && Boolean(spec.metadata && spec.metadata.global_discovery === true);
 }
 
 async function ensureUniqueSpecSlug(client: Client, requested: string): Promise<string> {
@@ -349,103 +344,32 @@ export async function getSchemaSpecBundle(
 }
 
 export async function listDiscoverableSpecs(env: Env): Promise<DiscoverableSpecSummary[]> {
+  return listRegistryMcpSpecs(env);
+}
+
+export async function listRegistryMcpSpecs(
+  env: Env,
+  options?: { includeClosed?: boolean },
+): Promise<DiscoverableSpecSummary[]> {
   const client = await createSupabaseClient(env);
-  const { data: attachments, error: attachmentError } = await client
-    .from('page_schema_specs')
-    .select('id, schema_id, spec_id, enabled, is_main, sort_order, created_at, updated_at')
-    .eq('enabled', true)
-    .order('sort_order', { ascending: true })
-    .order('created_at', { ascending: true });
+  let query = client
+    .from('llm_specs')
+    .select('*')
+    .eq('status', 'published')
+    .order('updated_at', { ascending: false })
+    .order('name', { ascending: true });
 
-  if (attachmentError) {
-    throw new Error(attachmentError.message);
+  if (!options?.includeClosed) {
+    query = query.eq('is_public', true);
   }
 
-  const attachmentRows = (attachments ?? []) as PageSchemaSpecAttachmentRow[];
-  if (attachmentRows.length === 0) {
-    return [];
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(error.message);
   }
 
-  const specIds = Array.from(new Set(attachmentRows.map((attachment) => attachment.spec_id)));
-  const schemaIds = Array.from(new Set(attachmentRows.map((attachment) => attachment.schema_id)));
-
-  const [{ data: specs, error: specsError }, { data: schemas, error: schemasError }, { data: globalSpecs, error: globalSpecsError }] = await Promise.all([
-    client
-      .from('llm_specs')
-      .select('*')
-      .in('id', specIds),
-    client
-      .from('page_schemas')
-      .select('id, slug, name, registration_status, frontend_url')
-      .in('id', schemaIds),
-    client
-      .from('llm_specs')
-      .select('*')
-      .eq('status', 'published')
-      .eq('is_public', true),
-  ]);
-
-  if (specsError) {
-    throw new Error(specsError.message);
-  }
-
-  if (schemasError) {
-    throw new Error(schemasError.message);
-  }
-
-  if (globalSpecsError) {
-    throw new Error(globalSpecsError.message);
-  }
-
-  const specMap = new Map(
-    ((specs ?? []) as Record<string, unknown>[]).map((row) => {
-      const spec = mapSpecRow(row);
-      return [spec.id, spec] as const;
-    }),
-  );
-
-  const schemaMap = new Map(
-    ((schemas ?? []) as Array<Record<string, unknown>>).map((row) => [String(row.id), {
-      id: String(row.id),
-      slug: String(row.slug),
-      name: String(row.name),
-      registration_status: typeof row.registration_status === 'string' ? row.registration_status : null,
-      frontend_url: typeof row.frontend_url === 'string' ? row.frontend_url : null,
-    }] as const),
-  );
-
-  const attachedDiscoverableSpecs = attachmentRows
-    .map((attachment) => {
-      const spec = specMap.get(attachment.spec_id);
-      const schema = schemaMap.get(attachment.schema_id);
-      if (!spec || !schema || schema.registration_status !== 'registered') {
-        return null;
-      }
-
-      return {
-        id: spec.id,
-        slug: spec.slug,
-        name: spec.name,
-        description: spec.description,
-        status: spec.status,
-        is_public: spec.is_public,
-        llm_instructions: spec.llm_instructions,
-        definition: spec.definition,
-        tags: spec.tags ?? [],
-        metadata: spec.metadata,
-        updated_at: spec.updated_at,
-        enabled: attachment.enabled,
-        is_main: attachment.is_main,
-        sort_order: attachment.sort_order,
-        discovery_scope: 'schema',
-        schema,
-      } as DiscoverableSpecSummary;
-    })
-    .filter((entry): entry is DiscoverableSpecSummary => entry !== null);
-
-  const globallyDiscoverableSpecs = ((globalSpecs ?? []) as Record<string, unknown>[])
+  return ((data ?? []) as Record<string, unknown>[])
     .map((row) => mapSpecRow(row))
-    .filter(isGlobalDiscoverableSpec)
     .map((spec) => ({
       id: spec.id,
       slug: spec.slug,
@@ -460,48 +384,18 @@ export async function listDiscoverableSpecs(env: Env): Promise<DiscoverableSpecS
       updated_at: spec.updated_at,
       enabled: true,
       is_main: false,
-      sort_order: -1,
-      discovery_scope: 'global',
+      sort_order: 0,
+      discovery_scope: 'mcp-registry',
+      access_scope: spec.is_public ? 'public' : 'closed',
       schema: null,
     }) satisfies DiscoverableSpecSummary);
-
-  const deduped = new Map<string, DiscoverableSpecSummary>();
-  [...attachedDiscoverableSpecs, ...globallyDiscoverableSpecs].forEach((spec) => {
-    if (!deduped.has(spec.id)) {
-      deduped.set(spec.id, spec);
-    }
-  });
-
-  return [...deduped.values()]
-    .sort((left, right) => {
-      if (left.discovery_scope !== right.discovery_scope) {
-        return left.discovery_scope === 'global' ? -1 : 1;
-      }
-
-      if (!left.schema || !right.schema) {
-        return left.name.localeCompare(right.name);
-      }
-
-      if (left.schema.slug === right.schema.slug) {
-        if (left.is_main !== right.is_main) {
-          return left.is_main ? -1 : 1;
-        }
-        return left.sort_order - right.sort_order;
-      }
-      return left.schema.slug.localeCompare(right.schema.slug);
-    });
 }
 
-export function isMcpExposedDiscoverableSpec(spec: DiscoverableSpecSummary): boolean {
-  return Boolean(spec.metadata && spec.metadata.mcp_exposed === true);
-}
-
-export async function listMcpExposedDiscoverableSpecs(env: Env): Promise<DiscoverableSpecSummary[]> {
-  const specs = await listDiscoverableSpecs(env);
-  return specs.filter(isMcpExposedDiscoverableSpec);
-}
-
-export async function getDiscoverableSpecBySlug(env: Env, slug: string): Promise<DiscoverableSpecSummary | null> {
-  const specs = await listDiscoverableSpecs(env);
+export async function getDiscoverableSpecBySlug(
+  env: Env,
+  slug: string,
+  options?: { includeClosed?: boolean },
+): Promise<DiscoverableSpecSummary | null> {
+  const specs = await listRegistryMcpSpecs(env, options);
   return specs.find((spec) => spec.slug === slug) ?? null;
 }

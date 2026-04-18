@@ -176,7 +176,6 @@ const SpecEditor = () => {
   const [llmInstructions, setLlmInstructions] = useState('');
   const [status, setStatus] = useState<SpecRecord['status']>('draft');
   const [isPublic, setIsPublic] = useState(false);
-  const [isMcpExposed, setIsMcpExposed] = useState(false);
   const [isMainTemplate, setIsMainTemplate] = useState(false);
   const [tagsText, setTagsText] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('generic-tool');
@@ -199,12 +198,11 @@ const SpecEditor = () => {
         setLlmInstructions(spec.llm_instructions ?? '');
         setStatus(spec.status);
         setIsPublic(spec.is_public);
-        setIsMcpExposed(Boolean(spec.metadata?.mcp_exposed));
         setIsMainTemplate(spec.is_main_template);
         setTagsText(spec.tags.join(', '));
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'Failed to load spec.');
-        navigate('/specs', { replace: true });
+        toast.error(error instanceof Error ? error.message : 'Failed to load MCP entry.');
+        navigate('/mcp', { replace: true });
       } finally {
         setIsLoading(false);
       }
@@ -263,10 +261,7 @@ const SpecEditor = () => {
       is_public: isPublic,
       is_main_template: isMainTemplate,
       tags: tagsText.split(',').map((entry) => entry.trim()).filter(Boolean),
-      metadata: {
-        ...(existingSpec?.metadata ?? {}),
-        mcp_exposed: isMcpExposed,
-      },
+      metadata: existingSpec?.metadata ?? {},
     };
 
     try {
@@ -277,10 +272,10 @@ const SpecEditor = () => {
       setStatus(savedSpec.status);
       toast.success(
         targetStatus === 'published'
-          ? (language === 'en' ? 'Spec published.' : 'Spec veröffentlicht.')
-          : (language === 'en' ? 'Spec saved.' : 'Spec gespeichert.'),
+          ? (language === 'en' ? 'MCP published.' : 'MCP veröffentlicht.')
+          : (language === 'en' ? 'MCP saved.' : 'MCP gespeichert.'),
       );
-      navigate(`/specs/${savedSpec.slug}`, { replace: true });
+      navigate(`/mcp/${savedSpec.slug}`, { replace: true });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save spec.');
     } finally {
@@ -290,7 +285,7 @@ const SpecEditor = () => {
 
   if (isLoading) {
     return (
-      <AdminPageLayout title={language === 'en' ? 'Specs' : 'Specs'} icon={Bot}>
+      <AdminPageLayout title="MCP" icon={Bot}>
         <AdminCard className="flex min-h-[280px] items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </AdminCard>
@@ -300,15 +295,16 @@ const SpecEditor = () => {
 
   return (
     <AdminPageLayout
-      title={isEditing ? (language === 'en' ? 'Edit Spec' : 'Spec bearbeiten') : (language === 'en' ? 'New Spec' : 'Neue Spec')}
+      title={isEditing ? (language === 'en' ? 'Edit MCP' : 'MCP bearbeiten') : (language === 'en' ? 'New MCP' : 'Neues MCP')}
       description={language === 'en'
-        ? 'Define reusable agent-readable tool contracts for schema registration, REST discovery, and MCP.'
-        : 'Definiere wiederverwendbare agentenlesbare Tool-Verträge für Schema-Registrierung, REST-Discovery und MCP.'}
+        ? 'Define reusable MCP entries. Published public entries are exposed without auth. Published closed entries require a valid Supabase JWT.'
+        : 'Definiere wiederverwendbare MCP-Einträge. Veröffentlichte öffentliche Einträge werden ohne Auth freigegeben. Veröffentlichte geschlossene Einträge erfordern ein gültiges Supabase-JWT.'}
       icon={Bot}
+      containerClassName="max-w-[1480px]"
       actions={(
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button asChild variant="outline">
-            <Link to="/specs">
+            <Link to="/mcp">
               <ArrowLeft className="mr-2 h-4 w-4" />
               {language === 'en' ? 'Back' : 'Zurück'}
             </Link>
@@ -316,23 +312,24 @@ const SpecEditor = () => {
           {status !== 'published' ? (
             <Button variant="secondary" onClick={() => void handleSave('published')} disabled={isSaving}>
               {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-              {language === 'en' ? 'Publish spec' : 'Spec veröffentlichen'}
+              {language === 'en' ? 'Publish MCP' : 'MCP veröffentlichen'}
             </Button>
           ) : null}
           <Button onClick={() => void handleSave()} disabled={isSaving}>
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            {language === 'en' ? 'Save spec' : 'Spec speichern'}
+            {language === 'en' ? 'Save MCP' : 'MCP speichern'}
           </Button>
         </div>
       )}
     >
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="w-full">
+        <div className="grid items-start gap-6 2xl:grid-cols-[minmax(0,1fr)_420px]">
         <AdminCard title={language === 'en' ? 'Definition' : 'Definition'} icon={FileCode2} iconColor="from-indigo-500 to-cyan-600">
           <div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="spec-name">{language === 'en' ? 'Name' : 'Name'}</Label>
-                <Input id="spec-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Customer Support Bot" />
+                <Input id="spec-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Customer Support MCP" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="spec-slug">Slug</Label>
@@ -349,25 +346,12 @@ const SpecEditor = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="spec-description">{language === 'en' ? 'Description' : 'Beschreibung'}</Label>
+                <Label htmlFor="spec-description">{language === 'en' ? 'Description' : 'Beschreibung'}</Label>
               <Textarea id="spec-description" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>{language === 'en' ? 'Status' : 'Status'}</Label>
-                <Select value={status} onValueChange={(value) => setStatus(value as SpecRecord['status'])}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="published">Published</SelectItem>
-                    <SelectItem value="archived">Archived</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
+              <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="spec-tags">Tags</Label>
                 <Input id="spec-tags" value={tagsText} onChange={(event) => setTagsText(event.target.value)} placeholder="schema, customer-support, public-tool" />
                 <p className="text-xs text-muted-foreground">
@@ -380,35 +364,9 @@ const SpecEditor = () => {
               <div className="rounded-lg border p-4 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <Label>{language === 'en' ? 'Public discovery' : 'Öffentliche Discovery'}</Label>
-                    <p className="text-xs text-muted-foreground">
-                      {language === 'en' ? 'Allow the spec to be returned by public REST/MCP discovery when attached to registered schemas.' : 'Erlaube, dass die Spec bei öffentlicher REST/MCP-Discovery erscheint, wenn sie an registrierte Schemas angehängt ist.'}
-                    </p>
-                  </div>
-                  <Switch checked={isPublic} onCheckedChange={setIsPublic} />
-                </div>
-              </div>
-
-              <div className="rounded-lg border p-4 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <Label>{language === 'en' ? 'MCP Mode' : 'MCP Modus'}</Label>
-                    <p className="text-xs text-muted-foreground">
-                      {language === 'en' ? 'Expose this spec as a top-level MCP tool when published and public.' : 'Exponiere diese Spec als Top-Level MCP-Tool, wenn sie veröffentlicht und öffentlich ist.'}
-                    </p>
-                  </div>
-                  <Switch checked={isMcpExposed} onCheckedChange={setIsMcpExposed} />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-lg border p-4 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
                     <Label>{language === 'en' ? 'Registry template' : 'Registry-Vorlage'}</Label>
                     <p className="text-xs text-muted-foreground">
-                      {language === 'en' ? 'Mark this spec as a reusable template for schema editors.' : 'Markiere diese Spec als wiederverwendbare Vorlage für Schema-Editoren.'}
+                      {language === 'en' ? 'Mark this MCP entry as a reusable template for schema editors.' : 'Markiere diesen MCP-Eintrag als wiederverwendbare Vorlage für Schema-Editoren.'}
                     </p>
                   </div>
                   <Switch checked={isMainTemplate} onCheckedChange={setIsMainTemplate} />
@@ -423,7 +381,7 @@ const SpecEditor = () => {
                 value={llmInstructions}
                 onChange={(event) => setLlmInstructions(event.target.value)}
                 rows={5}
-                placeholder="Explain how agents should interpret and use this spec."
+                placeholder="Explain how agents should interpret and use this MCP entry."
               />
             </div>
 
@@ -460,7 +418,52 @@ const SpecEditor = () => {
           </div>
         </AdminCard>
 
-        <div className="space-y-6">
+        <div className="space-y-6 2xl:sticky 2xl:top-6">
+          <AdminCard title={language === 'en' ? 'MCP Settings' : 'MCP-Einstellungen'} icon={Bot} iconColor="from-slate-700 to-slate-900">
+            <div className="space-y-4">
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label>{language === 'en' ? 'Publication' : 'Veröffentlichung'}</Label>
+                    <p className="text-xs text-muted-foreground">
+                      {language === 'en'
+                        ? 'Toggle between draft and published. Only published MCP entries are registered on the MCP server.'
+                        : 'Wechsle zwischen Entwurf und veröffentlicht. Nur veröffentlichte MCP-Einträge werden auf dem MCP-Server registriert.'}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={status === 'published'}
+                    onCheckedChange={(checked) => setStatus(checked ? 'published' : 'draft')}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {status === 'published'
+                    ? (language === 'en' ? 'Published' : 'Veröffentlicht')
+                    : status === 'archived'
+                      ? (language === 'en' ? 'Archived. Toggle to restore as draft.' : 'Archiviert. Zum Wiederherstellen auf Entwurf umschalten.')
+                      : (language === 'en' ? 'Draft' : 'Entwurf')}
+                </p>
+              </div>
+
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label>{language === 'en' ? 'Access' : 'Zugriff'}</Label>
+                    <p className="text-xs text-muted-foreground">
+                      {language === 'en' ? 'Public MCP entries are visible without auth. Auth-required MCP entries require a valid Supabase JWT in the Authorization header.' : 'Öffentliche MCP-Einträge sind ohne Auth sichtbar. Auth-erforderliche MCP-Einträge erfordern ein gültiges Supabase-JWT im Authorization-Header.'}
+                    </p>
+                  </div>
+                  <Switch checked={isPublic} onCheckedChange={setIsPublic} />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {isPublic
+                    ? (language === 'en' ? 'Public' : 'Öffentlich')
+                    : (language === 'en' ? 'Auth required' : 'Auth erforderlich')}
+                </p>
+              </div>
+            </div>
+          </AdminCard>
+
           <AdminCard title={language === 'en' ? 'Validation' : 'Validierung'} icon={parsedDefinition.valid ? CheckCircle2 : AlertCircle} iconColor={parsedDefinition.valid ? 'from-emerald-500 to-teal-600' : 'from-amber-500 to-red-600'}>
             <div className="space-y-4">
               <div className="flex flex-wrap gap-2">
@@ -468,7 +471,7 @@ const SpecEditor = () => {
                   {parsedDefinition.valid ? (language === 'en' ? 'Definition valid' : 'Definition gültig') : (language === 'en' ? 'Definition invalid' : 'Definition ungültig')}
                 </Badge>
                 <Badge variant="outline">{status}</Badge>
-                <Badge variant="outline">{isPublic ? (language === 'en' ? 'Public' : 'Öffentlich') : (language === 'en' ? 'Private' : 'Privat')}</Badge>
+                <Badge variant="outline">{isPublic ? (language === 'en' ? 'Public' : 'Öffentlich') : (language === 'en' ? 'Auth required' : 'Auth erforderlich')}</Badge>
               </div>
 
               {!parsedDefinition.valid && parsedDefinition.error && (
@@ -499,8 +502,8 @@ const SpecEditor = () => {
                   <AlertTitle>{language === 'en' ? 'Ready for discovery' : 'Bereit für Discovery'}</AlertTitle>
                   <AlertDescription>
                     {language === 'en'
-                      ? 'Public exposure still depends on schema attachment and schema registration status.'
-                      : 'Die öffentliche Sichtbarkeit hängt weiterhin von Schema-Anhang und Schema-Registrierungsstatus ab.'}
+                      ? 'Published MCP entries are registered automatically. Public entries are visible without auth, closed entries require a valid Supabase JWT.'
+                      : 'Veröffentlichte MCP-Einträge werden automatisch registriert. Öffentliche Einträge sind ohne Auth sichtbar, geschlossene Einträge erfordern ein gültiges Supabase-JWT.'}
                   </AlertDescription>
                 </Alert>
               )}
@@ -525,6 +528,7 @@ const SpecEditor = () => {
                 : definitionText}
             </pre>
           </AdminCard>
+        </div>
         </div>
       </div>
     </AdminPageLayout>
