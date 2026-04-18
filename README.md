@@ -78,6 +78,8 @@ The CMS also includes an MCP registry in the admin UI at `/mcp`.
 - Published public MCP entries are visible without authentication.
 - Published closed MCP entries require a valid Supabase auth JWT in the `Authorization: Bearer <token>` header.
 - Draft MCP entries remain editor-only and are not registered into the public MCP tool list.
+- Built-in workflow tools now include `start_here`, `login`, and `new_schema` to support agent-led schema creation and frontend registration.
+- `new_schema` creates a pending, unassigned schema with no registration code; the user must start registration in the CMS before `register_frontend` can complete the frontend hookup.
 
 In production, Cloudflare static assets are configured with selective worker-first routing for `/api/*`, `/mcp`, `/mcp/*`, and `/.well-known/*`. This keeps the SPA asset-first for normal frontend requests while guaranteeing that API and MCP discovery endpoints always reach the Worker.
 

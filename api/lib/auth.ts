@@ -32,6 +32,11 @@ function normalizeRoles(value: unknown): string[] {
   return value.filter((entry): entry is string => typeof entry === 'string');
 }
 
+export function getRolesFromToken(token: string): string[] {
+  const payload = decodeJwtPayload(token);
+  return normalizeRoles(payload?.user_roles);
+}
+
 function hasRequiredRole(userRoles: string[], requiredRole: AppRole): boolean {
   const normalizedRoles = new Set<string>(userRoles.map((role) => role === 'staff' ? 'user' : role));
   const minimumRank = ROLE_ORDER.indexOf(requiredRole);
@@ -55,8 +60,7 @@ export async function requireAppRole(
     return c.json({ error: 'Invalid or expired session.' }, 401);
   }
 
-  const payload = decodeJwtPayload(token);
-  const roles = normalizeRoles(payload?.user_roles);
+  const roles = getRolesFromToken(token);
 
   if (!hasRequiredRole(roles, requiredRole)) {
     return c.json({ error: 'Insufficient permissions.' }, 403);
@@ -80,8 +84,7 @@ export async function getOptionalAuthSession(
     return c.json({ error: 'Invalid or expired session.' }, 401);
   }
 
-  const payload = decodeJwtPayload(token);
-  const roles = normalizeRoles(payload?.user_roles);
+  const roles = getRolesFromToken(token);
 
   return { token, roles };
 }

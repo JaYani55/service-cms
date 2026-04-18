@@ -2,6 +2,7 @@ import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
 import { PanelLeft } from "lucide-react"
+import { useLocation } from "react-router-dom"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -66,6 +67,7 @@ const SidebarProvider = React.forwardRef<
     ref
   ) => {
     const isMobile = useIsMobile()
+    const location = useLocation()
     const [openMobile, setOpenMobile] = React.useState(false)
 
     // This is the internal state of the sidebar.
@@ -109,6 +111,18 @@ const SidebarProvider = React.forwardRef<
       window.addEventListener("keydown", handleKeyDown)
       return () => window.removeEventListener("keydown", handleKeyDown)
     }, [toggleSidebar])
+
+    React.useEffect(() => {
+      if (!isMobile && openMobile) {
+        setOpenMobile(false)
+      }
+    }, [isMobile, openMobile])
+
+    React.useEffect(() => {
+      if (openMobile) {
+        setOpenMobile(false)
+      }
+    }, [location.pathname])
 
     // We add a state so that we can do data-state="expanded" or "collapsed".
     // This makes it easier to style the sidebar with Tailwind classes.
@@ -198,7 +212,7 @@ const Sidebar = React.forwardRef<
           <SheetContent
             data-sidebar="sidebar"
             data-mobile="true"
-            className="w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+            className="h-[100dvh] w-[--sidebar-width] max-w-[--sidebar-width] overflow-hidden border-r border-sidebar-border bg-sidebar p-0 text-sidebar-foreground"
             style={
               {
                 "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -208,7 +222,7 @@ const Sidebar = React.forwardRef<
             role="complementary"
             aria-label="Mobile sidebar navigation"
           >
-            <div className="flex h-full w-full flex-col">{children}</div>
+            <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">{children}</div>
           </SheetContent>
         </Sheet>
       )

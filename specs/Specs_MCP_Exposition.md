@@ -106,6 +106,9 @@ The MCP server is exposed at `/mcp`.
 
 Built-in tools remain available:
 
+- `start_here`
+- `login`
+- `new_schema`
 - `list_available_tools`
 - `get_spec_definition`
 - `list_schemas`
@@ -166,6 +169,16 @@ Recommended workflow for a custom MCP entry:
 4. Publish the MCP entry.
 5. Test anonymously if it is public.
 6. Test with a valid Supabase JWT if it is closed.
+
+Recommended workflow for schema-driven frontend generation:
+
+1. Call `start_here` to get the current Specy workflow and auth model.
+2. Call `login` if the workflow requires authenticated tools such as `new_schema` or closed MCP entries.
+3. Use `list_schemas` and `get_schema_spec` to inspect existing patterns.
+4. Call `new_schema` to create a pending, unassigned schema from the generated schema JSON.
+5. Have the user review the schema in the CMS and click Register to generate the registration code.
+6. Build the frontend against the created schema and call `register_frontend` with the code.
+7. Call `check_health` to verify the registered frontend is reachable.
 
 ## 8. Summary
 
