@@ -63,6 +63,7 @@
     "@tiptap/extension-bold": "^3.9.1",
     "@tiptap/extension-heading": "^3.9.1",
     "@tiptap/extension-italic": "^3.9.1",
+    "@tiptap/extension-link": "^3.9.1",
     "@tiptap/extension-paragraph": "^3.9.1",
     "@tiptap/extension-typography": "^3.9.1",
     "@tiptap/pm": "^3.9.1",

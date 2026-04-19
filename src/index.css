@@ -407,6 +407,22 @@
   @apply italic;
 }
 
+.ProseMirror a {
+  @apply text-blue-600 underline underline-offset-2 decoration-blue-500/70 cursor-pointer transition-colors;
+}
+
+.dark .ProseMirror a {
+  @apply text-blue-400 decoration-blue-300/70;
+}
+
+.ProseMirror a:hover {
+  @apply text-blue-700 decoration-blue-700;
+}
+
+.dark .ProseMirror a:hover {
+  @apply text-blue-300 decoration-blue-200;
+}
+
 .ProseMirror p {
   @apply my-2;
 }

@@ -1,14 +1,19 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Typography from '@tiptap/extension-typography';
 import Bold from '@tiptap/extension-bold';
 import Italic from '@tiptap/extension-italic';
+import Link from '@tiptap/extension-link';
+import { TextSelection } from '@tiptap/pm/state';
 import { Button } from '@/components/ui/button';
-import { Bold as BoldIcon, Italic as ItalicIcon, Heading1, Heading2, Heading3, List, ListOrdered } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Bold as BoldIcon, Italic as ItalicIcon, Heading1, Heading2, Heading3, Link as LinkIcon, List, ListOrdered, Unlink } from 'lucide-react';
 
 interface TiptapMark {
   type: string;
+  attrs?: Record<string, unknown>;
 }
 
 interface TiptapNode {
@@ -21,13 +26,51 @@ interface TiptapNode {
 
 const escapeMarkdownText = (text: string): string => text;
 
+const areMarksEqual = (left?: TiptapMark[], right?: TiptapMark[]): boolean => {
+  if ((left?.length || 0) !== (right?.length || 0)) {
+    return false;
+  }
+
+  return (left || []).every((mark, index) => {
+    const rightMark = right?.[index];
+    return mark.type === rightMark?.type && JSON.stringify(mark.attrs || {}) === JSON.stringify(rightMark?.attrs || {});
+  });
+};
+
+const appendTextNode = (nodes: TiptapNode[], text: string, marks?: TiptapMark[]): void => {
+  if (!text) {
+    return;
+  }
+
+  const previousNode = nodes[nodes.length - 1];
+  if (previousNode?.type === 'text' && areMarksEqual(previousNode.marks, marks)) {
+    previousNode.text = `${previousNode.text || ''}${text}`;
+    return;
+  }
+
+  nodes.push(createTextNode(text, marks));
+};
+
+const getLinkHref = (marks?: TiptapMark[]): string | null => {
+  const linkMark = marks?.find((mark) => mark.type === 'link');
+  const href = typeof linkMark?.attrs?.href === 'string' ? linkMark.attrs.href.trim() : '';
+  return href || null;
+};
+
+const createLinkAttributes = (href: string): Record<string, string> => ({
+  href,
+  title: href,
+});
+
 const applyMarks = (text: string, marks?: TiptapMark[]): string => {
   if (!marks || marks.length === 0) {
     return text;
   }
 
-  const hasBold = marks.some((mark) => mark.type === 'bold');
-  const hasItalic = marks.some((mark) => mark.type === 'italic');
+  const nonLinkMarks = marks.filter((mark) => mark.type !== 'link');
+  const hasBold = nonLinkMarks.some((mark) => mark.type === 'bold');
+  const hasItalic = nonLinkMarks.some((mark) => mark.type === 'italic');
+  const href = getLinkHref(marks);
   let formatted = text;
 
   if (hasBold && hasItalic) {
@@ -38,7 +81,127 @@ const applyMarks = (text: string, marks?: TiptapMark[]): string => {
     formatted = `*${formatted}*`;
   }
 
+  if (href) {
+    formatted = `[${formatted}](${href})`;
+  }
+
   return formatted;
+};
+
+const findClosingToken = (value: string, token: string, startIndex: number): number => {
+  let searchIndex = startIndex;
+
+  while (searchIndex < value.length) {
+    const foundIndex = value.indexOf(token, searchIndex);
+    if (foundIndex === -1) {
+      return -1;
+    }
+
+    if (foundIndex > startIndex) {
+      return foundIndex;
+    }
+
+    searchIndex = foundIndex + token.length;
+  }
+
+  return -1;
+};
+
+const findMatchingLinkClose = (value: string, startIndex: number): { labelEnd: number; urlEnd: number } | null => {
+  let labelDepth = 1;
+
+  for (let index = startIndex + 1; index < value.length; index += 1) {
+    const char = value[index];
+
+    if (char === '[') {
+      labelDepth += 1;
+      continue;
+    }
+
+    if (char === ']') {
+      labelDepth -= 1;
+
+      if (labelDepth === 0) {
+        if (value[index + 1] !== '(') {
+          return null;
+        }
+
+        const urlEnd = value.indexOf(')', index + 2);
+        if (urlEnd === -1) {
+          return null;
+        }
+
+        return { labelEnd: index, urlEnd };
+      }
+    }
+  }
+
+  return null;
+};
+
+const parseInlineSegment = (input: string, inheritedMarks: TiptapMark[] = []): TiptapNode[] => {
+  const nodes: TiptapNode[] = [];
+  let cursor = 0;
+
+  while (cursor < input.length) {
+    const currentSlice = input.slice(cursor);
+
+    if (currentSlice.startsWith('***')) {
+      const closingIndex = findClosingToken(input, '***', cursor + 3);
+      if (closingIndex !== -1) {
+        const inner = input.slice(cursor + 3, closingIndex);
+        nodes.push(...parseInlineSegment(inner, [...inheritedMarks, { type: 'bold' }, { type: 'italic' }]));
+        cursor = closingIndex + 3;
+        continue;
+      }
+    }
+
+    if (currentSlice.startsWith('**')) {
+      const closingIndex = findClosingToken(input, '**', cursor + 2);
+      if (closingIndex !== -1) {
+        const inner = input.slice(cursor + 2, closingIndex);
+        nodes.push(...parseInlineSegment(inner, [...inheritedMarks, { type: 'bold' }]));
+        cursor = closingIndex + 2;
+        continue;
+      }
+    }
+
+    if (currentSlice.startsWith('*')) {
+      const closingIndex = findClosingToken(input, '*', cursor + 1);
+      if (closingIndex !== -1) {
+        const inner = input.slice(cursor + 1, closingIndex);
+        nodes.push(...parseInlineSegment(inner, [...inheritedMarks, { type: 'italic' }]));
+        cursor = closingIndex + 1;
+        continue;
+      }
+    }
+
+    if (currentSlice.startsWith('[')) {
+      const linkRange = findMatchingLinkClose(input, cursor);
+      if (linkRange) {
+        const label = input.slice(cursor + 1, linkRange.labelEnd);
+        const href = input.slice(linkRange.labelEnd + 2, linkRange.urlEnd).trim();
+        if (href) {
+          nodes.push(...parseInlineSegment(label, [...inheritedMarks, { type: 'link', attrs: createLinkAttributes(href) }]));
+          cursor = linkRange.urlEnd + 1;
+          continue;
+        }
+      }
+    }
+
+    const nextSpecialIndex = (() => {
+      const candidates = ['***', '**', '*', '[']
+        .map((token) => input.indexOf(token, cursor + 1))
+        .filter((index) => index !== -1);
+
+      return candidates.length > 0 ? Math.min(...candidates) : input.length;
+    })();
+
+    appendTextNode(nodes, input.slice(cursor, nextSpecialIndex), inheritedMarks);
+    cursor = nextSpecialIndex;
+  }
+
+  return nodes;
 };
 
 const serializeInlineContent = (nodes?: TiptapNode[]): string => {
@@ -121,34 +284,10 @@ const createTextNode = (text: string, marks?: TiptapMark[]): TiptapNode => ({
 
 const parseInlineMarkdown = (input: string): TiptapNode[] => {
   const nodes: TiptapNode[] = [];
-  const pattern = /(\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*)/g;
   const segments = input.split('\n');
 
   segments.forEach((segment, segmentIndex) => {
-    let cursor = 0;
-    let match: RegExpExecArray | null;
-
-    pattern.lastIndex = 0;
-    while ((match = pattern.exec(segment)) !== null) {
-      if (match.index > cursor) {
-        nodes.push(createTextNode(segment.slice(cursor, match.index)));
-      }
-
-      const token = match[0];
-      if (token.startsWith('***') && token.endsWith('***')) {
-        nodes.push(createTextNode(token.slice(3, -3), [{ type: 'bold' }, { type: 'italic' }]));
-      } else if (token.startsWith('**') && token.endsWith('**')) {
-        nodes.push(createTextNode(token.slice(2, -2), [{ type: 'bold' }]));
-      } else if (token.startsWith('*') && token.endsWith('*')) {
-        nodes.push(createTextNode(token.slice(1, -1), [{ type: 'italic' }]));
-      }
-
-      cursor = match.index + token.length;
-    }
-
-    if (cursor < segment.length) {
-      nodes.push(createTextNode(segment.slice(cursor)));
-    }
+    nodes.push(...parseInlineSegment(segment));
 
     if (segmentIndex < segments.length - 1) {
       nodes.push({ type: 'hardBreak' });
@@ -257,6 +396,37 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 }) => {
   const isUpdatingFromPropRef = useRef(false);
   const lastContentRef = useRef(content);
+  const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
+  const [linkPopoverOpen, setLinkPopoverOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [hasLinkTarget, setHasLinkTarget] = useState(false);
+
+  const normalizeLinkUrl = (value: string): string | null => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    if (trimmed.startsWith('/') || trimmed.startsWith('#')) {
+      return trimmed;
+    }
+
+    if (trimmed.startsWith('mailto:') || trimmed.startsWith('tel:')) {
+      return trimmed;
+    }
+
+    const candidate = /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+    try {
+      const parsed = new URL(candidate);
+      if (!['http:', 'https:', 'mailto:', 'tel:'].includes(parsed.protocol)) {
+        return null;
+      }
+      return candidate;
+    } catch {
+      return null;
+    }
+  };
 
   const editor = useEditor({
     extensions: [
@@ -268,6 +438,16 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       Typography,
       Bold,
       Italic,
+      Link.configure({
+        openOnClick: false,
+        autolink: false,
+        defaultProtocol: 'https',
+        HTMLAttributes: {
+          class: 'text-blue-600 underline underline-offset-2 decoration-blue-500/70 hover:text-blue-700 dark:text-blue-400 dark:decoration-blue-300/70 dark:hover:text-blue-300 cursor-pointer transition-colors',
+          rel: 'noopener noreferrer',
+          target: '_blank',
+        },
+      }),
     ],
     content: parseMarkdownToDocument(content || ''),
     onUpdate: ({ editor }) => {
@@ -283,6 +463,13 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       
       // Call onChange immediately without debounce
       onChange(markdown);
+    },
+    onSelectionUpdate: ({ editor }) => {
+      const { from, to, empty } = editor.state.selection;
+      if (!empty || editor.isActive('link')) {
+        savedSelectionRef.current = { from, to };
+      }
+      setHasLinkTarget(!empty || editor.isActive('link'));
     },
     immediatelyRender: false,
   });
@@ -314,6 +501,61 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     return null;
   }
 
+  const openLinkEditor = (): void => {
+    const { from, to, empty } = editor.state.selection;
+    if (!empty || editor.isActive('link')) {
+      savedSelectionRef.current = { from, to };
+    }
+
+    setLinkUrl(typeof editor.getAttributes('link').href === 'string' ? editor.getAttributes('link').href : '');
+    setLinkPopoverOpen(true);
+  };
+
+  const applyLink = (): void => {
+    const normalizedUrl = normalizeLinkUrl(linkUrl);
+    if (!normalizedUrl) {
+      return;
+    }
+
+    editor.chain().focus().run();
+
+    const savedSelection = savedSelectionRef.current;
+    if (savedSelection) {
+      const resolvedSelection = TextSelection.create(
+        editor.state.doc,
+        savedSelection.from,
+        savedSelection.to,
+      );
+      editor.view.dispatch(editor.view.state.tr.setSelection(resolvedSelection));
+    }
+
+    editor.chain().focus().extendMarkRange('link').setLink(createLinkAttributes(normalizedUrl)).run();
+
+    setLinkPopoverOpen(false);
+  };
+
+  const removeLink = (): void => {
+    const savedSelection = savedSelectionRef.current;
+    if (savedSelection) {
+      const resolvedSelection = TextSelection.create(
+        editor.state.doc,
+        savedSelection.from,
+        savedSelection.to,
+      );
+      editor.view.dispatch(editor.view.state.tr.setSelection(resolvedSelection));
+    }
+
+    editor.chain().focus().extendMarkRange('link').unsetLink().run();
+    setLinkPopoverOpen(false);
+    setLinkUrl('');
+  };
+
+  const preserveEditorSelection = (event: React.MouseEvent<HTMLButtonElement>): void => {
+    event.preventDefault();
+  };
+
+  const canEditLink = hasLinkTarget;
+
   return (
     <div className={`border rounded-lg overflow-hidden ${className}`}>
       {/* Toolbar */}
@@ -322,6 +564,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           type="button"
           variant={editor.isActive('bold') ? 'default' : 'ghost'}
           size="sm"
+          onMouseDown={preserveEditorSelection}
           onClick={() => editor.chain().focus().toggleBold().run()}
           className="h-8 w-8 p-0"
         >
@@ -331,6 +574,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           type="button"
           variant={editor.isActive('italic') ? 'default' : 'ghost'}
           size="sm"
+          onMouseDown={preserveEditorSelection}
           onClick={() => editor.chain().focus().toggleItalic().run()}
           className="h-8 w-8 p-0"
         >
@@ -341,6 +585,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           type="button"
           variant={editor.isActive('heading', { level: 1 }) ? 'default' : 'ghost'}
           size="sm"
+          onMouseDown={preserveEditorSelection}
           onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
           className="h-8 w-8 p-0"
         >
@@ -350,6 +595,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           type="button"
           variant={editor.isActive('heading', { level: 2 }) ? 'default' : 'ghost'}
           size="sm"
+          onMouseDown={preserveEditorSelection}
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
           className="h-8 w-8 p-0"
         >
@@ -359,6 +605,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           type="button"
           variant={editor.isActive('heading', { level: 3 }) ? 'default' : 'ghost'}
           size="sm"
+          onMouseDown={preserveEditorSelection}
           onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
           className="h-8 w-8 p-0"
         >
@@ -369,6 +616,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           type="button"
           variant={editor.isActive('bulletList') ? 'default' : 'ghost'}
           size="sm"
+          onMouseDown={preserveEditorSelection}
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           className="h-8 w-8 p-0"
         >
@@ -378,17 +626,82 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           type="button"
           variant={editor.isActive('orderedList') ? 'default' : 'ghost'}
           size="sm"
+          onMouseDown={preserveEditorSelection}
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
           className="h-8 w-8 p-0"
         >
           <ListOrdered className="h-4 w-4" />
         </Button>
+        <div className="w-px h-8 bg-border mx-1" />
+        <Popover
+          open={linkPopoverOpen}
+          onOpenChange={(open) => {
+            setLinkPopoverOpen(open);
+            if (!open) {
+              setLinkUrl('');
+            }
+          }}
+        >
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant={editor.isActive('link') ? 'default' : 'ghost'}
+              size="sm"
+              onMouseDown={preserveEditorSelection}
+              onClick={openLinkEditor}
+              className="h-8 w-8 p-0"
+              disabled={!canEditLink}
+            >
+              <LinkIcon className="h-4 w-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-80 space-y-3">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Link setzen</p>
+              <p className="text-xs text-muted-foreground">
+                Text markieren, URL einfuegen und anwenden.
+              </p>
+            </div>
+            <Input
+              value={linkUrl}
+              onChange={(event) => setLinkUrl(event.target.value)}
+              placeholder="https://example.com"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  applyLink();
+                }
+              }}
+            />
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={removeLink}
+                disabled={!editor.isActive('link')}
+              >
+                <Unlink className="h-4 w-4 mr-1" />
+                Entfernen
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={applyLink}
+                disabled={!normalizeLinkUrl(linkUrl)}
+              >
+                Link uebernehmen
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Editor */}
       <EditorContent 
         editor={editor} 
         className="prose prose-sm max-w-none p-4 min-h-[120px] focus:outline-none"
+        placeholder={placeholder}
       />
     </div>
   );
