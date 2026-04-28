@@ -12,6 +12,7 @@ import mediaRoute from './routes/media';
 import accountsRoute from './routes/accounts';
 import pluginsRoute from './routes/plugins';
 import formsRoute from './routes/forms';
+import objectsRoute from './routes/objects';
 import specsRoute from './routes/specs';
 import { mountPluginRoutes } from './plugin-routes';
 import { agentLogger } from './middleware/agentLogger';
@@ -91,6 +92,7 @@ app.route('/api/media', mediaRoute);
 app.route('/api/accounts', accountsRoute);
 app.route('/api/plugins', pluginsRoute);
 app.route('/api/forms', formsRoute);
+app.route('/api/objects', objectsRoute);
 app.route('/api/specs', specsRoute);
 app.route('/mcp', mcpRoute);
 

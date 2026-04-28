@@ -1,4 +1,4 @@
-import { Bot, Calendar, Settings, Users, User, List, LogOut, HelpCircle, Moon, Sun, ChevronUp, FileText, SlidersHorizontal, Puzzle, Globe, ClipboardList } from "lucide-react"
+import { Bot, Box, Calendar, Settings, Users, User, List, LogOut, HelpCircle, Moon, Sun, ChevronUp, FileText, SlidersHorizontal, Puzzle, Globe, ClipboardList } from "lucide-react"
 import { useLocation, Link } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { useTheme } from "@/contexts/ThemeContext"
@@ -63,6 +63,11 @@ export function AppSidebar() {
         title: language === "en" ? "Forms" : "Formulare",
         url: "/forms",
         icon: ClipboardList,
+      },
+      {
+        title: language === "en" ? "Objects" : "Objekte",
+        url: "/objects",
+        icon: Box,
       },
       {
         title: "MCP",

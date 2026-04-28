@@ -11,6 +11,7 @@ The repo combines:
 - a Supabase backend for auth, data, and storage
 - a schema-driven page builder
 - a forms subsystem
+- an objects subsystem (arbitrary schema-validated JSONB data objects)
 - a plugin and webapp extension model
 - agent-facing REST and MCP entry points
 
@@ -25,9 +26,10 @@ The overview is split into the following major processes:
 3. Page schema lifecycle
 4. Page content authoring and publishing
 5. Forms authoring and submission
-6. Agent and API interaction
-7. Plugin lifecycle
-8. Runtime content consumption
+6. Objects authoring and retrieval
+7. Agent and API interaction
+8. Plugin lifecycle
+9. Runtime content consumption
 
 ---
 
@@ -320,7 +322,63 @@ Gateway: requires_auth?
 
 ---
 
-## 6. Agent and API Interaction Workflow
+## 6. Objects Authoring and Retrieval Workflow
+
+### BPMN Overview
+
+```text
+Pool: ServiceCMS Platform
+
+Lane: Staff User (admin/super-admin)
+  Start Event: Need a reusable data object
+  Task: Open /objects/new
+  Task: Define schema fields (name, type, description, meta)
+  Task: Fill data JSONB payload
+  Task: Configure access (api_enabled, requires_auth)
+  Task: Save object
+  End Event: Object stored and accessible via API
+
+Lane: React SPA
+  Task: Render schema field editor (types: string, number, boolean, array, object, url, email, date, price)
+  Task: Validate data JSON
+  Task: POST/PUT to /api/objects via objectService
+  Task: Show saved object in /objects list
+
+Lane: Cloudflare Worker API
+  Task: Validate admin JWT
+  Task: Persist object to Supabase
+  Task: Serve GET /api/objects/:idOrSlug (enforce requires_auth per object)
+
+Lane: Supabase
+  Task: Store public.objects row (schema + data as JSONB)
+  Task: Enforce RLS (admin write, anon read when published + api_enabled + !requires_auth)
+
+Lane: Agent / Automation Client
+  Task: GET /api/objects/:idOrSlug
+  Task: Consume schema definition and data payload
+  End Event: Structured data returned as JSON
+```
+
+### Object Access Rules
+
+```text
+Gateway: requires_auth?
+  -> Yes: bearer token required for GET
+  -> No: public access when status=published and api_enabled=true
+```
+
+### Object Data Model
+
+```text
+Object created
+  -> schema JSONB: field definitions with type, description, placeholder, meta_description
+  -> data JSONB:   the actual payload matching the schema
+  -> Returned together by GET /api/objects/:idOrSlug
+```
+
+---
+
+## 7. Agent and API Interaction Workflow
 
 ### BPMN Overview
 
@@ -332,6 +390,7 @@ Pool: ServiceCMS Platform
     -> Schema discovery
     -> Form retrieval
     -> Form submission
+    -> Object retrieval
     -> MCP tool usage
 
 Lane: Cloudflare Worker API
@@ -340,6 +399,7 @@ Lane: Cloudflare Worker API
   Gateway: Endpoint type?
     -> /api/schemas
     -> /api/forms
+    -> /api/objects
     -> /mcp
     -> plugin routes
   Task: Resolve Supabase client scope
@@ -367,13 +427,16 @@ Agent wants page schema
 Agent submits form answers
   -> POST /api/forms/:identifier/answers
 
+Agent wants a data object
+  -> GET /api/objects/:idOrSlug
+
 Agent wants CMS-native tool interface
   -> POST /mcp
 ```
 
 ---
 
-## 7. Plugin Lifecycle Workflow
+## 8. Plugin Lifecycle Workflow
 
 ### BPMN Overview
 
@@ -410,7 +473,7 @@ Lane: Plugin Runtime
 
 ---
 
-## 8. Runtime Content Consumption Workflow
+## 9. Runtime Content Consumption Workflow
 
 ### BPMN Overview
 
@@ -492,12 +555,12 @@ Authoring UI
   -> Set up infrastructure and secrets
   -> Apply migrations and deploy worker/frontend
   -> Authenticate users and enforce role access
-  -> Author schemas, pages, forms, and plugins in the CMS
+  -> Author schemas, pages, forms, objects, and plugins in the CMS
   -> Persist structured JSONB content in Supabase
   -> Serve data through SPA, Worker REST routes, and MCP
   -> Trigger frontend revalidation when published content changes
   -> Accept runtime submissions and log operational activity
-(End: CMS, API, forms, plugins, and frontend ecosystem operating together)
+(End: CMS, API, forms, objects, plugins, and frontend ecosystem operating together)
 ```
 
 ---
@@ -514,6 +577,7 @@ Lane: Staff User
   -> Manage schemas
   -> Manage pages
   -> Manage forms
+  -> Manage objects
   -> Manage plugins
   -> Review answers and logs
   End
@@ -532,12 +596,12 @@ Lane: Cloudflare Worker API
   -> Coordinate revalidation and form submissions
 
 Lane: Supabase
-  -> Store users, roles, pages, schemas, forms, answers, plugins
+  -> Store users, roles, pages, schemas, forms, objects, answers, plugins
   -> Enforce RLS
   -> Return data to SPA and API
 
 Lane: External Frontend / Agent
-  -> Consume schema specs, page content, or forms
+  -> Consume schema specs, page content, forms, or objects
   -> Register frontend
   -> Submit answers or request content
 ```

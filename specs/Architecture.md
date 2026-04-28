@@ -114,6 +114,7 @@ All database tables are defined as plain SQL files under `migrations/`. They are
 | `mentorbooking_notifications.sql` | Per-user event notifications. FK to `user_profile`. |
 | `agent_logs.sql` | Page-builder AI agent request/response log. FK to `page_schemas`. |
 | `agent_logs_hardening.sql` | Tightens `agent_logs` access so only `super-admin` can read/delete operational logs. |
+| `objects.sql` | Arbitrarily-definable data objects (`public.objects`). Each row stores a schema JSONB (field definitions) and a data JSONB payload. Access controlled via `requires_auth` and `api_enabled`. Admin/super-admin can write; super-admin can delete. Uses `set_current_timestamp_updated_at` trigger. |
 | `system_config.sql` | Generic key/value store for non-sensitive runtime settings such as storage configuration and communication-log verbosity. |
 | `Auth/Access_hook.sql` | Supabase Auth hook function (`custom_access_token_hook`) that injects `user_roles` into JWT claims. Requires `roles` and `user_roles` tables to exist. Also includes `GRANT EXECUTE … TO supabase_auth_admin`, `GRANT USAGE ON SCHEMA public`, and the corresponding `REVOKE` from `authenticated`, `anon`, `public` — required for the hook to be callable by Supabase Auth internals. |
 | `storage.default.sql` _(template)_ | **Template only — not applied directly.** Defines four RLS policies for Supabase Storage (`public read`, `authenticated insert/update/delete`) using the placeholder `REPLACE_WITH_STORAGE_BUCKET`. The wizard substitutes the user-chosen bucket name and applies the result. **Skipped entirely when `STORAGE_PROVIDER = r2`** — Cloudflare R2 manages its own permissions outside Supabase. |
@@ -141,6 +142,7 @@ preamble.sql                    (app_enum, trigger functions)
   mentor_groups.sql             (standalone)
   mentorbooking_notifications.sql  (← user_profile)
   system_config.sql             (standalone runtime settings store)
+  objects.sql                   (standalone; needs preamble trigger function only)
   Auth/Access_hook.sql          (← roles + user_roles — must be last)
   storage.sql                   (generated from storage.default.sql — Supabase provider only)
 ```
@@ -152,6 +154,7 @@ preamble.sql                    (app_enum, trigger functions)
 | `public.app_enum` | `ENUM` | `roles.sql` (`app app_enum[]` column) |
 | `set_current_timestamp_updated_at()` | trigger fn | `products.sql`, `page_schemas.sql` |
 | `set_current_timestamp_updated_at()` | trigger fn | `forms.sql` |
+| `set_current_timestamp_updated_at()` | trigger fn | `objects.sql` |
 | `sync_is_draft_with_status()` | trigger fn | `products.sql` (keeps `is_draft` ↔ `status` in sync) |
 | `update_event_status()` | trigger fn | `mentorbooking_events.sql` (INSERT / UPDATE trigger) |
 | `update_event_status_on_request()` | trigger fn | `mentorbooking_events.sql` (UPDATE trigger) |

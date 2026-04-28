@@ -939,6 +939,7 @@ async function stepMigrations(supabaseUrl, serviceRoleKey, storageProvider, stor
   //  mentorbooking_notifications.sql  — needs user_profile
   //  agent_logs.sql            — needs page_schemas
   //  agent_logs_hardening.sql  — tightens agent_logs RLS after base table setup
+  //  objects.sql               — standalone; needs preamble trigger function only
   //  Auth/Access_hook.sql      — needs roles + user_roles (last)
   // Storage RLS policies are only needed for Supabase Storage.
   // Cloudflare R2 manages its own permissions outside of Supabase.
@@ -974,6 +975,7 @@ async function stepMigrations(supabaseUrl, serviceRoleKey, storageProvider, stor
     'mentorbooking_notifications.sql',
     'agent_logs.sql',
     'agent_logs_hardening.sql',
+    'objects.sql',
     'Auth/Access_hook.sql',
     // storage.sql is generated from storage.default.sql at runtime using the
     // user-chosen bucket name — only applies when STORAGE_PROVIDER = 'supabase'.

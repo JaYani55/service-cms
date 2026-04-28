@@ -31,6 +31,8 @@ import Forms from "./pages/Forms";
 import FormEditor from "./pages/FormEditor";
 import FormAnswers from "./pages/FormAnswers";
 import FormSharePage from "./pages/FormSharePage";
+import Objects from "./pages/Objects";
+import ObjectEditor from "./pages/ObjectEditor";
 import Specs from "./pages/Specs";
 import SpecEditor from "./pages/SpecEditor";
 
@@ -232,6 +234,10 @@ const AppContent = () => {
           <Route path="/forms/new" element={<ProtectedRoute requiredRole="user"><FormEditor /></ProtectedRoute>} />
           <Route path="/forms/:formId" element={<ProtectedRoute requiredRole="user"><FormEditor /></ProtectedRoute>} />
           <Route path="/forms/:formId/answers" element={<ProtectedRoute requiredRole="user"><FormAnswers /></ProtectedRoute>} />
+
+          <Route path="/objects" element={<ProtectedRoute requiredRole="admin"><Objects /></ProtectedRoute>} />
+          <Route path="/objects/new" element={<ProtectedRoute requiredRole="admin"><ObjectEditor /></ProtectedRoute>} />
+          <Route path="/objects/:objectId" element={<ProtectedRoute requiredRole="admin"><ObjectEditor /></ProtectedRoute>} />
           <Route path="/mcp" element={<ProtectedRoute requiredRole="user"><Specs /></ProtectedRoute>} />
           <Route path="/mcp/new" element={<ProtectedRoute requiredRole="user"><SpecEditor /></ProtectedRoute>} />
           <Route path="/mcp/:specSlug" element={<ProtectedRoute requiredRole="user"><SpecEditor /></ProtectedRoute>} />
