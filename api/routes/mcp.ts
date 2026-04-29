@@ -35,6 +35,8 @@ const BUILT_IN_MCP_TOOLS = [
   'get_schema_spec',
   'register_frontend',
   'check_health',
+  'list_objects',
+  'get_object',
 ] as const;
 
 interface SchemaListRow {
@@ -360,6 +362,94 @@ async function createMcpServerWithTools(env: Env, baseUrl: string, includeClosed
       lines.push('='.repeat(60));
 
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    },
+  );
+
+  // ── Tool: list_objects ─────────────────────────────────────────────────
+  server.tool(
+    'list_objects',
+    'List all available data objects. Objects are arbitrarily definable JSONB data structures (e.g. price lists, configurations).',
+    {},
+    async () => {
+      const admin = await createSupabaseAdminClient(env);
+      let query = admin
+        .from('objects')
+        .select('id, name, slug, description, status, requires_auth, api_enabled, updated_at')
+        .neq('status', 'archived');
+
+      // If no valid auth, only show public ones
+      if (!includeClosed) {
+        query = query
+          .eq('status', 'published')
+          .eq('api_enabled', true)
+          .eq('requires_auth', false);
+      }
+
+      const { data, error } = await query.order('updated_at', { ascending: false });
+
+      if (error) {
+        return { content: [{ type: 'text' as const, text: `Error fetching objects: ${error.message}` }] };
+      }
+
+      const objectsMap = (data ?? []).map((o) => ({
+        id: o.id,
+        name: o.name,
+        slug: o.slug,
+        description: o.description,
+        requires_auth: o.requires_auth,
+        updated_at: o.updated_at,
+        detail_url: `${baseUrl}/api/objects/${o.slug}`,
+      }));
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ objects: objectsMap, total: objectsMap.length }, null, 2),
+        }],
+      };
+    },
+  );
+
+  // ── Tool: get_object ───────────────────────────────────────────────────
+  server.tool(
+    'get_object',
+    'Get the full data and schema for a specific object by its slug or ID.',
+    { idOrSlug: z.string().describe('The object slug or UUID') },
+    async ({ idOrSlug }) => {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+      const admin = await createSupabaseAdminClient(env);
+
+      let query = admin
+        .from('objects')
+        .select('*');
+
+      query = isUuid ? query.eq('id', idOrSlug) : query.eq('slug', idOrSlug);
+
+      const { data: rows, error } = await query.single();
+
+      if (error || !rows) {
+        return { content: [{ type: 'text' as const, text: `Object "${idOrSlug}" not found or error: ${error?.message}` }] };
+      }
+
+      // Check auth requirement if not admin
+      if (rows.requires_auth && !includeClosed) {
+        return { content: [{ type: 'text' as const, text: 'This object requires authentication. Call login first.' }] };
+      }
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            id: rows.id,
+            name: rows.name,
+            slug: rows.slug,
+            description: rows.description,
+            schema: rows.schema,
+            data: rows.data,
+            updated_at: rows.updated_at,
+          }, null, 2),
+        }],
+      };
     },
   );
 

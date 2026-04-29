@@ -61,6 +61,8 @@ export const API_CATALOG: ApiEndpointDefinition[] = [
   "timestamp": "2026-04-06T12:00:00.000Z",
   "endpoints": {
     "schemas": "https://cms.example.com/api/schemas",
+    "specs": "https://cms.example.com/api/specs",
+    "objects": "https://cms.example.com/api/objects",
     "plugins": "https://cms.example.com/api/plugins",
     "mcp": "https://cms.example.com/mcp"
   }
@@ -595,6 +597,73 @@ export const API_CATALOG: ApiEndpointDefinition[] = [
       },
     ],
     tables: ['forms'],
+  },
+  {
+    id: 'objects-list',
+    tag: 'Objects',
+    method: 'GET',
+    path: '/api/objects',
+    summary: 'List published API-enabled data objects',
+    description: 'Returns all published objects that have API access enabled. Admins see all non-archived objects, including those requiring authentication.',
+    auth: 'bearer-optional',
+    mountsAt: '/api/objects',
+    sourceFile: 'api/routes/objects.ts',
+    logging: 'agentLogger',
+    parameters: [
+      { name: 'Authorization', in: 'header', required: false, type: 'Bearer token', description: 'Used to reveal internal or non-public objects for admins.' },
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Available objects list.',
+        example: `{
+  "objects": [
+    { "id": "uuid", "name": "Price List", "slug": "prices", "requires_auth": false }
+  ]
+}`,
+      },
+    ],
+    tables: ['objects'],
+  },
+  {
+    id: 'objects-get',
+    tag: 'Objects',
+    method: 'GET',
+    path: '/api/objects/:idOrSlug',
+    summary: 'Retrieve object data and schema',
+    description: 'Returns the full JSONB data and schema definition for a specific object by ID or slug. Enforces requires_auth if the object is restricted.',
+    auth: 'bearer-optional',
+    mountsAt: '/api/objects',
+    sourceFile: 'api/routes/objects.ts',
+    logging: 'agentLogger',
+    parameters: [
+      { name: 'idOrSlug', in: 'path', required: true, type: 'string', description: 'Object ID (UUID) or custom slug.' },
+      { name: 'Authorization', in: 'header', required: false, type: 'Bearer token', description: 'Required for objects with requires_auth=true.' },
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Complete object payload.',
+        example: `{
+  "id": "uuid",
+  "name": "Price List",
+  "slug": "prices",
+  "schema": { "items": { "type": "object", ... } },
+  "data": { "items": [...] }
+}`,
+      },
+      {
+        status: 401,
+        description: 'Authentication required for this object.',
+        example: `{ "error": "Authentication required." }`,
+      },
+      {
+        status: 404,
+        description: 'Object not found or API disabled.',
+        example: `{ "error": "Object not found." }`,
+      },
+    ],
+    tables: ['objects'],
   },
   {
     id: 'forms-share-get',

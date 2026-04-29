@@ -36,6 +36,7 @@ app.get('/', (c) => {
     endpoints: {
       schemas: `${baseUrl}/api/schemas`,
       specs: `${baseUrl}/api/specs`,
+      objects: `${baseUrl}/api/objects`,
       plugins: `${baseUrl}/api/plugins`,
       mcp: `${baseUrl}/mcp`,
       mcp_discovery: `${baseUrl}/.well-known/mcp.json`,
@@ -73,6 +74,8 @@ app.get('/.well-known/mcp.json', (c) => {
       'get_schema_spec',
       'register_frontend',
       'check_health',
+      'list_objects',
+      'get_object',
     ],
   });
 });
