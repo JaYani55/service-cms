@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { requireAppRole } from '../lib/auth';
 import type { Env } from '../lib/supabase';
 import { buildMailSecretName, buildS3SecretName, getMailSecretNamespace, getManagedSecretMetadata, getS3SourceSecretNamespace, upsertManagedSecret } from '../lib/managedSecrets';
+import { invalidateLoggingConfigCache } from '../middleware/agentLogger';
 import { createSupabaseAdminClient } from '../lib/supabase';
 import { getExtraMediaSources, getLoggingConfig, getMailConfig, getStorageConfig, upsertExtraMediaSources, upsertLoggingConfig, upsertMailConfig, upsertStorageConfig, type ExtraMediaSource } from '../lib/systemConfig';
 
@@ -171,6 +172,7 @@ config.put('/logging', async (c) => {
     mode,
     enabledEndpointKeys,
   });
+  invalidateLoggingConfigCache();
 
   return c.json({
     success: true,

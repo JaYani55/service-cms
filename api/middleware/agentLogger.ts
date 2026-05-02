@@ -27,6 +27,10 @@ let loggingConfigCache:
     }
   | null = null;
 
+export function invalidateLoggingConfigCache(): void {
+  loggingConfigCache = null;
+}
+
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
