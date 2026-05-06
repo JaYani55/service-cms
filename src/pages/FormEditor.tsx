@@ -77,6 +77,7 @@ const FormEditor = () => {
   const [apiEnabled, setApiEnabled] = useState(true);
   const [notifyOwner, setNotifyOwner] = useState(false);
   const [notifyStaff, setNotifyStaff] = useState(false);
+  const [deleteAnswerAfterEmail, setDeleteAnswerAfterEmail] = useState(false);
   const [staffRecipientIds, setStaffRecipientIds] = useState<string[]>([]);
   const [staffOptions, setStaffOptions] = useState<FormNotificationStaffOption[]>([]);
   const [staffSearch, setStaffSearch] = useState('');
@@ -123,6 +124,7 @@ const FormEditor = () => {
         setApiEnabled(form.api_enabled);
         setNotifyOwner(Boolean(form.notification_settings?.notify_owner));
         setNotifyStaff(Boolean(form.notification_settings?.notify_staff));
+        setDeleteAnswerAfterEmail(Boolean(form.notification_settings?.delete_answer_after_email));
         setStaffRecipientIds(form.notification_settings?.recipients.map((recipient) => recipient.staff_id) ?? []);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Failed to load form.');
@@ -184,6 +186,7 @@ const FormEditor = () => {
         notification_settings: {
           notify_owner: notifyOwner,
           notify_staff: notifyStaff,
+          delete_answer_after_email: deleteAnswerAfterEmail,
           staff_recipient_ids: staffRecipientIds,
         },
       };
@@ -355,9 +358,24 @@ const FormEditor = () => {
                     <Switch checked={notifyStaff} onCheckedChange={setNotifyStaff} />
                   </div>
 
+                  <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/40 p-3">
+                    <div>
+                      <Label>{language === 'en' ? 'Delete answer after e-mail delivery' : 'Antwort nach E-Mail-Versand löschen'}</Label>
+                      <p className="text-xs text-muted-foreground">
+                        {language === 'en'
+                          ? 'Removes the saved answer after all notification e-mails for that submission were sent successfully.'
+                          : 'Entfernt die gespeicherte Antwort, nachdem alle Benachrichtigungs-E-Mails dieser Einreichung erfolgreich versendet wurden.'}
+                      </p>
+                    </div>
+                    <Switch checked={deleteAnswerAfterEmail} onCheckedChange={setDeleteAnswerAfterEmail} />
+                  </div>
+
                   <div className="flex flex-wrap gap-2">
                     {notifyOwner && <Badge>{language === 'en' ? 'Owner enabled' : 'Besitzer aktiv'}</Badge>}
                     {notifyStaff && <Badge variant="secondary">{staffRecipientIds.length} {language === 'en' ? 'staff selected' : 'Mitarbeiter ausgewählt'}</Badge>}
+                    {deleteAnswerAfterEmail && (
+                      <Badge variant="outline">{language === 'en' ? 'Auto-delete answers' : 'Antworten automatisch löschen'}</Badge>
+                    )}
                     {!notifyOwner && !notifyStaff && (
                       <Badge variant="outline">{language === 'en' ? 'No e-mail notifications' : 'Keine E-Mail-Benachrichtigungen'}</Badge>
                     )}

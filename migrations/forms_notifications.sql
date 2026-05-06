@@ -23,6 +23,7 @@ create table if not exists public.form_notification_settings (
   form_id uuid not null,
   notify_owner boolean not null default false,
   notify_staff boolean not null default false,
+  delete_answer_after_email boolean not null default false,
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
   constraint form_notification_settings_pkey primary key (form_id),

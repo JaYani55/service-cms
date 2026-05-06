@@ -742,7 +742,7 @@ export const API_CATALOG: ApiEndpointDefinition[] = [
 }`,
       },
     ],
-    sideEffects: ['Inserts one row into forms_answers.', 'Enqueues mail_delivery_jobs and queued mail_delivery_events when form notifications are configured.', 'Stores ip_address, user_agent, and source_slug when available.'],
+    sideEffects: ['Inserts one row into forms_answers.', 'Enqueues mail_delivery_jobs and queued mail_delivery_events when form notifications are configured.', 'Deletes the saved forms_answers row after all notification e-mails are sent when the form enables auto-deletion.', 'Stores ip_address, user_agent, and source_slug when available.'],
     tables: ['forms', 'forms_answers', 'form_notification_settings', 'form_notification_recipients', 'mail_delivery_jobs', 'mail_delivery_events'],
   },
   {
@@ -821,7 +821,7 @@ export const API_CATALOG: ApiEndpointDefinition[] = [
 }`,
       },
     ],
-    sideEffects: ['Inserts one row into forms_answers with submitted_via=api.', 'Enqueues mail_delivery_jobs and queued mail_delivery_events when form notifications are configured.'],
+    sideEffects: ['Inserts one row into forms_answers with submitted_via=api.', 'Enqueues mail_delivery_jobs and queued mail_delivery_events when form notifications are configured.', 'Deletes the saved forms_answers row after all notification e-mails are sent when the form enables auto-deletion.'],
     tables: ['forms', 'forms_answers', 'form_notification_settings', 'form_notification_recipients', 'mail_delivery_jobs', 'mail_delivery_events'],
   },
   {

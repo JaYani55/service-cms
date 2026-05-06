@@ -39,6 +39,7 @@ export interface FormNotificationRecipient {
 export interface FormNotificationSettings {
   notify_owner: boolean;
   notify_staff: boolean;
+  delete_answer_after_email: boolean;
   recipients: FormNotificationRecipient[];
 }
 

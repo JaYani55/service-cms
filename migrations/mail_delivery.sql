@@ -29,7 +29,7 @@ create table if not exists public.mail_delivery_jobs (
   ),
   constraint mail_delivery_jobs_payload_is_object check (jsonb_typeof(payload) = 'object'),
   constraint mail_delivery_jobs_form_id_fkey foreign key (form_id) references public.forms(id) on delete cascade,
-  constraint mail_delivery_jobs_answer_id_fkey foreign key (answer_id) references public.forms_answers(id) on delete cascade,
+  constraint mail_delivery_jobs_answer_id_fkey foreign key (answer_id) references public.forms_answers(id) on delete set null,
   constraint mail_delivery_jobs_queued_by_fkey foreign key (queued_by) references auth.users(id) on delete set null
 ) tablespace pg_default;
 

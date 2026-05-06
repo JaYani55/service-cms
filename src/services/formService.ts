@@ -55,7 +55,7 @@ const getFormNotificationSettings = async (formId: string): Promise<FormNotifica
   const [{ data: settingsRow, error: settingsError }, { data: recipientRows, error: recipientsError }] = await Promise.all([
     supabase
       .from('form_notification_settings')
-      .select('notify_owner, notify_staff')
+      .select('notify_owner, notify_staff, delete_answer_after_email')
       .eq('form_id', formId)
       .maybeSingle(),
     supabase
@@ -95,6 +95,7 @@ const getFormNotificationSettings = async (formId: string): Promise<FormNotifica
   return {
     notify_owner: Boolean(settingsRow?.notify_owner),
     notify_staff: Boolean(settingsRow?.notify_staff),
+    delete_answer_after_email: Boolean(settingsRow?.delete_answer_after_email),
     recipients,
   };
 };
@@ -117,6 +118,7 @@ interface SaveFormInput {
   notification_settings?: {
     notify_owner: boolean;
     notify_staff: boolean;
+    delete_answer_after_email: boolean;
     staff_recipient_ids: string[];
   };
 }
@@ -150,6 +152,7 @@ const syncFormNotificationSettings = async (formId: string, notificationSettings
   const normalized = {
     notify_owner: Boolean(notificationSettings?.notify_owner),
     notify_staff: Boolean(notificationSettings?.notify_staff),
+    delete_answer_after_email: Boolean(notificationSettings?.delete_answer_after_email),
     staff_recipient_ids: [...new Set((notificationSettings?.staff_recipient_ids ?? []).filter(Boolean))],
   };
 
@@ -159,6 +162,7 @@ const syncFormNotificationSettings = async (formId: string, notificationSettings
       form_id: formId,
       notify_owner: normalized.notify_owner,
       notify_staff: normalized.notify_staff,
+      delete_answer_after_email: normalized.delete_answer_after_email,
     }, { onConflict: 'form_id' });
 
   if (upsertSettingsError) throw new Error(upsertSettingsError.message);

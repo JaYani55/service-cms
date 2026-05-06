@@ -18,6 +18,8 @@ type MailConfig = {
 
 type MailJob = {
   id: string;
+  form_id: string | null;
+  answer_id: string | null;
   provider: MailProvider | null;
   status: JobStatus;
   recipient_email: string;
@@ -278,10 +280,67 @@ async function appendDeliveryEvent(jobId: string, eventType: 'queued' | 'testing
   }
 }
 
+async function shouldDeleteAnswerAfterEmail(formId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('form_notification_settings')
+    .select('delete_answer_after_email')
+    .eq('form_id', formId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return Boolean(data?.delete_answer_after_email);
+}
+
+async function maybeDeleteDeliveredAnswer(job: MailJob) {
+  if (!job.form_id || !job.answer_id) {
+    return;
+  }
+
+  const deleteAnswer = await shouldDeleteAnswerAfterEmail(job.form_id);
+  if (!deleteAnswer) {
+    return;
+  }
+
+  const { count, error: remainingJobsError } = await supabase
+    .from('mail_delivery_jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('form_id', job.form_id)
+    .eq('answer_id', job.answer_id)
+    .neq('status', 'sent');
+
+  if (remainingJobsError) {
+    throw new Error(remainingJobsError.message);
+  }
+
+  if ((count ?? 0) > 0) {
+    return;
+  }
+
+  const answerId = job.answer_id;
+  const { error: deleteAnswerError } = await supabase
+    .from('forms_answers')
+    .delete()
+    .eq('id', answerId)
+    .eq('form_id', job.form_id);
+
+  if (deleteAnswerError) {
+    throw new Error(deleteAnswerError.message);
+  }
+
+  await appendDeliveryEvent(job.id, 'sent', 'Stored form answer deleted after successful outbound delivery.', {
+    formId: job.form_id,
+    answerId,
+    autoDeleted: true,
+  });
+}
+
 async function processJob(jobId: string) {
   const { data, error } = await supabase
     .from('mail_delivery_jobs')
-    .select('id, provider, status, recipient_email, subject, payload, attempt_count')
+    .select('id, form_id, answer_id, provider, status, recipient_email, subject, payload, attempt_count')
     .eq('id', jobId)
     .single();
 
@@ -341,6 +400,8 @@ async function processJob(jobId: string) {
       messageId: result.messageId,
       response: result.response,
     });
+
+    await maybeDeleteDeliveredAnswer(job);
 
     return {
       success: true,
